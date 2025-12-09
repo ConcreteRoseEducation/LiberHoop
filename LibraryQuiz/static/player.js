@@ -439,6 +439,18 @@ function showQuestion(data) {
             container.appendChild(btn);
         });
         
+    } else if (qType === 'open_poll') {
+        // Open poll - text input for free-form answers
+        container.classList.add('open-poll-mode');
+        container.innerHTML = `
+            <div class="text-input-container">
+                <p class="open-poll-prompt">Share your answer:</p>
+                <input type="text" id="openPollAnswer" placeholder="Type your answer..." autocomplete="off" maxlength="100">
+                <button class="submit-text-btn" onclick="submitOpenPollAnswer()">SUBMIT</button>
+            </div>
+        `;
+        setTimeout(() => document.getElementById('openPollAnswer').focus(), 100);
+        
     } else {
         // Choice or truefalse - standard buttons
         data.answers.forEach((answer, index) => {
@@ -467,6 +479,13 @@ function showQuestion(data) {
 
 function submitTextAnswer() {
     const input = document.getElementById('textAnswer');
+    if (input && input.value.trim()) {
+        submitAnswer(input.value.trim());
+    }
+}
+
+function submitOpenPollAnswer() {
+    const input = document.getElementById('openPollAnswer');
     if (input && input.value.trim()) {
         submitAnswer(input.value.trim());
     }

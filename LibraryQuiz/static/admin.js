@@ -19,6 +19,7 @@ const TYPE_LABELS = {
     'text': '✏️ Text Input',
     'number': '🔢 Number',
     'poll': '📊 Poll',
+    'open_poll': '💬 Open Poll',
     'wager': '🎲 Wager'
 };
 
@@ -487,6 +488,10 @@ function renderQuestions() {
             answerPreview = `<div class="correct-answer-display">
                 Answer: <strong>${q.correct}</strong>${tolerance > 0 ? ` (±${tolerance})` : ''}
             </div>`;
+        } else if (qType === 'open_poll') {
+            answerPreview = `<div class="correct-answer-display">
+                <strong>Open Poll</strong> - Players enter their own answers
+            </div>`;
         }
         
         card.innerHTML = `
@@ -532,6 +537,10 @@ function updateQuestionForm() {
         correctRadios.forEach(r => r.style.display = 'none');
         helpText.textContent = 'Polls have no correct answer - just fun opinions!';
         helpText.style.display = 'block';
+    } else if (qType === 'open_poll') {
+        document.getElementById('choiceAnswersGroup').style.display = 'none';
+        helpText.textContent = 'Players will enter their own answers - no predefined options needed!';
+        helpText.style.display = 'block';
     } else if (qType === 'truefalse') {
         document.getElementById('trueFalseGroup').style.display = 'block';
     } else if (qType === 'text') {
@@ -572,10 +581,12 @@ function openQuestionModal(questionId = null) {
                     const input = document.getElementById(`answer${i}`);
                     if (input) input.value = a;
                 });
-                if (qType !== 'poll' && question.correct !== undefined) {
+                if (qType !== 'poll' && qType !== 'open_poll' && question.correct !== undefined) {
                     const radio = document.querySelector(`input[name="correct"][value="${question.correct}"]`);
                     if (radio) radio.checked = true;
                 }
+            } else if (qType === 'open_poll') {
+                // open_poll doesn't have answers or correct - nothing to load
             } else if (qType === 'truefalse') {
                 const val = question.correct ? 'true' : 'false';
                 document.getElementById('trueFalseAnswer').value = val;
@@ -623,10 +634,12 @@ async function saveQuestion() {
             document.getElementById('answer3').value
         ].filter(a => a.trim());  // Remove empty answers
         
-        if (qType !== 'poll') {
+        if (qType !== 'poll' && qType !== 'open_poll') {
             const checkedRadio = document.querySelector('input[name="correct"]:checked');
             data.correct = checkedRadio ? parseInt(checkedRadio.value) : 0;
         }
+    } else if (qType === 'open_poll') {
+        // open_poll doesn't need answers or correct - players enter their own
     } else if (qType === 'truefalse') {
         data.correct = document.getElementById('trueFalseAnswer').value === 'true';
     } else if (qType === 'text') {

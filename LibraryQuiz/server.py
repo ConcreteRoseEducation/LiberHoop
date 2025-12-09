@@ -102,7 +102,7 @@ def load_questions():
         with open(QUESTIONS_FILE, "r") as f:
             return json.load(f)
     # Default questions with multiple types:
-    # type: "choice" (default), "truefalse", "poll", "text", "number", "wager"
+    # type: "choice" (default), "truefalse", "poll", "open_poll", "text", "number", "wager"
     default = {
         "categories": {
             "general": {
@@ -634,11 +634,11 @@ async def start_question(room: GameRoom):
         question_data["answers"] = question.get("answers", [])
     elif q_type == "truefalse":
         question_data["answers"] = ["TRUE", "FALSE"]
-    # text and number types don't have predefined answers
+    # text, number, and open_poll types don't have predefined answers
     
     # Send to host (with correct answer for non-polls)
     host_data = question_data.copy()
-    if q_type != "poll":
+    if q_type not in ["poll", "open_poll"]:
         host_data["correct"] = question.get("correct")
     
     await send_to_host(room, host_data)
@@ -710,6 +710,25 @@ async def reveal_answer(room: GameRoom):
         for player in room.players.values():
             if player.current_answer is not None:
                 poll_results[player.current_answer] = poll_results.get(player.current_answer, 0) + 1
+    elif q_type == "open_poll":
+        # Group similar answers together (case-insensitive, trimmed)
+        answer_groups = {}  # normalized_answer -> {count, original_answers}
+        for player in room.players.values():
+            if player.current_answer is not None:
+                normalized = str(player.current_answer).strip().lower()
+                if normalized:
+                    if normalized not in answer_groups:
+                        answer_groups[normalized] = {"count": 0, "answers": []}
+                    answer_groups[normalized]["count"] += 1
+                    # Keep original answer for display (first occurrence)
+                    if len(answer_groups[normalized]["answers"]) == 0:
+                        answer_groups[normalized]["answers"].append(str(player.current_answer).strip())
+        
+        # Convert to poll_results format: answer -> count
+        for normalized, group in answer_groups.items():
+            # Use the original answer text (first occurrence)
+            original_answer = group["answers"][0]
+            poll_results[original_answer] = group["count"]
     
     # Calculate scores
     results = []
@@ -717,7 +736,7 @@ async def reveal_answer(room: GameRoom):
         was_correct = check_answer(question, player.current_answer, correct_answer)
         points_earned = 0
         
-        if q_type == "poll":
+        if q_type in ["poll", "open_poll"]:
             # Polls give participation points only
             if player.current_answer is not None:
                 points_earned = 50
@@ -773,6 +792,10 @@ async def reveal_answer(room: GameRoom):
     if q_type == "poll":
         reveal_msg["poll_results"] = poll_results
         reveal_msg["answers"] = question.get("answers", [])
+    elif q_type == "open_poll":
+        reveal_msg["poll_results"] = poll_results
+        # Sort by count (descending) for display
+        reveal_msg["sorted_answers"] = sorted(poll_results.items(), key=lambda x: -x[1])
     elif q_type == "truefalse":
         reveal_msg["correct_answer"] = correct_answer
         reveal_msg["correct_text"] = "TRUE" if correct_answer else "FALSE"
@@ -974,6 +997,7 @@ async def player_websocket(websocket: WebSocket, room_code: str, player_id: str)
                     join_msg["current_question"]["player_score"] = player.score
             elif q_type == "truefalse":
                 join_msg["current_question"]["answers"] = ["TRUE", "FALSE"]
+            # open_poll, text, and number types don't have predefined answers
             
             # Check if player already answered
             if player.current_answer is not None:
@@ -1806,8 +1830,11 @@ async def add_question(request: Request):
     # Add type-specific fields
     if q_type in ["choice", "poll", "wager"]:
         question["answers"] = data.get("answers", ["", "", "", ""])
-        if q_type != "poll":
+        if q_type not in ["poll", "open_poll"]:
             question["correct"] = data.get("correct", 0)
+    elif q_type == "open_poll":
+        # open_poll doesn't need answers or correct - players enter their own
+        pass
     elif q_type == "truefalse":
         question["correct"] = data.get("correct", True)
     elif q_type == "number":
@@ -1849,8 +1876,11 @@ async def update_question(question_id: str, request: Request):
                 # Add type-specific fields
                 if q_type in ["choice", "poll", "wager"]:
                     updated["answers"] = data.get("answers", q.get("answers", []))
-                    if q_type != "poll":
+                    if q_type not in ["poll", "open_poll"]:
                         updated["correct"] = data.get("correct", q.get("correct", 0))
+                elif q_type == "open_poll":
+                    # open_poll doesn't need answers or correct - players enter their own
+                    pass
                 elif q_type == "truefalse":
                     updated["correct"] = data.get("correct", q.get("correct", True))
                 elif q_type == "number":

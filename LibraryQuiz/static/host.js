@@ -705,6 +705,7 @@ function showQuestion(data) {
     let typeLabel = '';
     if (gameMode === 'bowl') typeLabel = '🔔 BOWL: ';
     else if (qType === 'poll') typeLabel = '📊 POLL: ';
+    else if (qType === 'open_poll') typeLabel = '💬 OPEN POLL: ';
     else if (qType === 'wager') typeLabel = '🎲 WAGER: ';
     else if (qType === 'text') typeLabel = '✏️ TYPE: ';
     else if (qType === 'number') typeLabel = '🔢 NUMBER: ';
@@ -878,6 +879,47 @@ function showReveal(data) {
             <div class="stat">
                 <span class="stat-value">${totalVotes}</span>
                 <span class="stat-label">votes cast</span>
+            </div>
+        `;
+    } else if (qType === 'open_poll') {
+        // Show open poll results - grouped answers sorted by count
+        const pollResults = data.poll_results || {};
+        const sortedAnswers = data.sorted_answers || [];
+        const totalVotes = Object.values(pollResults).reduce((a, b) => a + b, 0);
+        
+        correctCard.className = 'correct-answer poll-results open-poll-results';
+        correctCard.innerHTML = '<span class="poll-title">💬 OPEN POLL RESULTS</span>';
+        
+        if (sortedAnswers.length === 0) {
+            correctCard.innerHTML += '<p class="no-answers">No answers submitted</p>';
+        } else {
+            let pollHtml = '<div class="poll-bars open-poll-bars">';
+            sortedAnswers.forEach(([answer, count], index) => {
+                const pct = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
+                const colorIndex = index % colors.length;
+                pollHtml += `
+                    <div class="poll-bar-row open-poll-row">
+                        <span class="poll-answer open-poll-answer">${escapeHtml(answer)}</span>
+                        <div class="poll-bar-container">
+                            <div class="poll-bar ${colors[colorIndex]}" style="width: ${pct}%"></div>
+                        </div>
+                        <span class="poll-count">${count}</span>
+                        <span class="poll-pct">${pct}%</span>
+                    </div>
+                `;
+            });
+            pollHtml += '</div>';
+            correctCard.innerHTML += pollHtml;
+        }
+        
+        resultStats.innerHTML = `
+            <div class="stat">
+                <span class="stat-value">${totalVotes}</span>
+                <span class="stat-label">responses</span>
+            </div>
+            <div class="stat">
+                <span class="stat-value">${sortedAnswers.length}</span>
+                <span class="stat-label">unique answers</span>
             </div>
         `;
     } else {
