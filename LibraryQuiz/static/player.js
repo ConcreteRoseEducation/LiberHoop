@@ -22,7 +22,16 @@ const state = {
     // Bowl mode state
     bowlPhase: null,  // 'buzzing', 'answering', 'stealing', 'waiting'
     canBuzz: true,
-    wonBuzz: false
+    wonBuzz: false,
+    // Minigame state
+    minigameState: null,
+    drawingCanvas: null,
+    drawingCtx: null,
+    isDrawing: false,
+    lastX: 0,
+    lastY: 0,
+    currentColor: '#000000',
+    brushSize: 5
 };
 
 // ─────────────────────────── Screens ─────────────────────────── #
@@ -154,6 +163,15 @@ function handleMessage(data) {
                 }
             }
             
+            // Handle minigame state
+            if (data.state === 'minigame' && data.minigame_state) {
+                showMinigame({
+                    minigame_type: data.minigame_state.type,
+                    prompt: data.minigame_state.prompt,
+                    duration: data.minigame_state.duration
+                });
+            }
+            
             // Show host disconnected warning if needed
             if (data.host_connected === false) {
                 showHostDisconnected();
@@ -269,6 +287,29 @@ function handleMessage(data) {
             
         case 'steal_not_eligible':
             showBowlWaiting('Your team already attempted.');
+            break;
+        
+        // Minigame events
+        case 'minigame_start':
+            showMinigame(data);
+            break;
+            
+        case 'minigame_end':
+            hideMinigame();
+            break;
+            
+        case 'minigame_submission_received':
+            // Show confirmation
+            const submitBtn = document.getElementById('submitMinigameBtn');
+            if (submitBtn) {
+                const originalText = submitBtn.textContent;
+                submitBtn.textContent = '✓ Submitted!';
+                submitBtn.disabled = true;
+                setTimeout(() => {
+                    submitBtn.textContent = originalText;
+                    submitBtn.disabled = false;
+                }, 2000);
+            }
             break;
     }
 }
@@ -895,6 +936,214 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
+// ─────────────────────────── Minigame Functions ─────────────────────────── #
+
+function showMinigame(data) {
+    state.minigameState = data;
+    
+    const minigameType = data.minigame_type || 'draw_freestyle';
+    const prompt = data.prompt || '';
+    
+    // Update UI
+    document.getElementById('minigameTitle').textContent = minigameType === 'draw_prompt' ? '🎨 DRAW IT!' : '🎨 FREE DRAW';
+    document.getElementById('minigamePrompt').textContent = prompt || 'Draw anything you want!';
+    
+    // Initialize canvas
+    initDrawingCanvas();
+    
+    // Start timer if duration is set
+    if (data.duration && data.duration > 0) {
+        startMinigameTimer(data.duration);
+    }
+    
+    showScreen('minigameScreen');
+}
+
+function hideMinigame() {
+    state.minigameState = null;
+    if (state.minigameTimerInterval) {
+        clearInterval(state.minigameTimerInterval);
+        state.minigameTimerInterval = null;
+    }
+    // Return to previous screen (lobby or results)
+    if (state.answered) {
+        showScreen('resultsScreen');
+    } else {
+        showScreen('lobbyScreen');
+    }
+}
+
+function startMinigameTimer(duration) {
+    const timerEl = document.getElementById('minigameTimer');
+    if (!timerEl) return;
+    
+    let timeLeft = duration;
+    timerEl.textContent = `Time: ${timeLeft}s`;
+    
+    if (state.minigameTimerInterval) {
+        clearInterval(state.minigameTimerInterval);
+    }
+    
+    state.minigameTimerInterval = setInterval(() => {
+        timeLeft--;
+        if (timerEl) {
+            timerEl.textContent = `Time: ${timeLeft}s`;
+        }
+        if (timeLeft <= 0) {
+            clearInterval(state.minigameTimerInterval);
+            state.minigameTimerInterval = null;
+            submitMinigameAnswer();
+        }
+    }, 1000);
+}
+
+function initDrawingCanvas() {
+    const canvas = document.getElementById('drawingCanvas');
+    if (!canvas) return;
+    
+    const container = document.getElementById('drawingContainer');
+    if (container) {
+        const rect = container.getBoundingClientRect();
+        canvas.width = rect.width - 20;
+        canvas.height = Math.min(rect.width - 20, window.innerHeight * 0.5);
+    } else {
+        canvas.width = window.innerWidth - 40;
+        canvas.height = window.innerHeight * 0.5;
+    }
+    
+    state.drawingCanvas = canvas;
+    state.drawingCtx = canvas.getContext('2d');
+    
+    // Set default drawing style
+    state.drawingCtx.strokeStyle = state.currentColor;
+    state.drawingCtx.lineWidth = state.brushSize;
+    state.drawingCtx.lineCap = 'round';
+    state.drawingCtx.lineJoin = 'round';
+    
+    // Clear canvas
+    state.drawingCtx.fillStyle = '#ffffff';
+    state.drawingCtx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Mouse events
+    canvas.addEventListener('mousedown', startDrawing);
+    canvas.addEventListener('mousemove', draw);
+    canvas.addEventListener('mouseup', stopDrawing);
+    canvas.addEventListener('mouseout', stopDrawing);
+    
+    // Touch events
+    canvas.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        const touch = e.touches[0];
+        const rect = canvas.getBoundingClientRect();
+        state.lastX = touch.clientX - rect.left;
+        state.lastY = touch.clientY - rect.top;
+        state.isDrawing = true;
+    });
+    
+    canvas.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        if (!state.isDrawing) return;
+        const touch = e.touches[0];
+        const rect = canvas.getBoundingClientRect();
+        const currentX = touch.clientX - rect.left;
+        const currentY = touch.clientY - rect.top;
+        
+        state.drawingCtx.beginPath();
+        state.drawingCtx.moveTo(state.lastX, state.lastY);
+        state.drawingCtx.lineTo(currentX, currentY);
+        state.drawingCtx.stroke();
+        
+        state.lastX = currentX;
+        state.lastY = currentY;
+    });
+    
+    canvas.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        state.isDrawing = false;
+    });
+    
+    // Color picker
+    const colorPicker = document.getElementById('colorPicker');
+    if (colorPicker) {
+        colorPicker.value = state.currentColor;
+        colorPicker.addEventListener('input', (e) => {
+            state.currentColor = e.target.value;
+            state.drawingCtx.strokeStyle = state.currentColor;
+        });
+    }
+    
+    // Brush size
+    const brushSize = document.getElementById('brushSize');
+    const brushSizeValue = document.getElementById('brushSizeValue');
+    if (brushSize) {
+        brushSize.value = state.brushSize;
+        brushSize.addEventListener('input', (e) => {
+            state.brushSize = parseInt(e.target.value);
+            state.drawingCtx.lineWidth = state.brushSize;
+            if (brushSizeValue) {
+                brushSizeValue.textContent = state.brushSize;
+            }
+        });
+    }
+    
+    // Clear button
+    const clearBtn = document.getElementById('clearCanvasBtn');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            state.drawingCtx.fillStyle = '#ffffff';
+            state.drawingCtx.fillRect(0, 0, canvas.width, canvas.height);
+        });
+    }
+    
+    // Submit button
+    const submitBtn = document.getElementById('submitMinigameBtn');
+    if (submitBtn) {
+        submitBtn.addEventListener('click', submitMinigameAnswer);
+    }
+}
+
+function startDrawing(e) {
+    state.isDrawing = true;
+    const rect = state.drawingCanvas.getBoundingClientRect();
+    state.lastX = e.clientX - rect.left;
+    state.lastY = e.clientY - rect.top;
+}
+
+function draw(e) {
+    if (!state.isDrawing) return;
+    
+    const rect = state.drawingCanvas.getBoundingClientRect();
+    const currentX = e.clientX - rect.left;
+    const currentY = e.clientY - rect.top;
+    
+    state.drawingCtx.beginPath();
+    state.drawingCtx.moveTo(state.lastX, state.lastY);
+    state.drawingCtx.lineTo(currentX, currentY);
+    state.drawingCtx.stroke();
+    
+    state.lastX = currentX;
+    state.lastY = currentY;
+}
+
+function stopDrawing() {
+    state.isDrawing = false;
+}
+
+function submitMinigameAnswer() {
+    if (!state.drawingCanvas || !state.ws) return;
+    
+    // Convert canvas to base64
+    const imageData = state.drawingCanvas.toDataURL('image/png');
+    
+    // Send to server
+    state.ws.send(JSON.stringify({
+        type: 'minigame_submit',
+        minigame_type: state.minigameState?.minigame_type || 'draw_freestyle',
+        data: imageData,
+        prompt: state.minigameState?.prompt
+    }));
+}
 
 // ─────────────────────────── Init ─────────────────────────── #
 

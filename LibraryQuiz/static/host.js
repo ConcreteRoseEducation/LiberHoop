@@ -236,6 +236,37 @@ function setupEventListeners() {
     // Start game
     document.getElementById('startGameBtn').addEventListener('click', startGame);
     
+    // Minigame controls
+    const startMinigameBtn = document.getElementById('startMinigameBtn');
+    if (startMinigameBtn) {
+        startMinigameBtn.addEventListener('click', startMinigame);
+    }
+    
+    const minigameType = document.getElementById('minigameType');
+    if (minigameType) {
+        minigameType.addEventListener('change', (e) => {
+            const promptInput = document.getElementById('minigamePrompt');
+            if (promptInput) {
+                promptInput.style.display = e.target.value === 'draw_prompt' ? 'block' : 'none';
+            }
+        });
+    }
+    
+    const revealStartMinigameBtn = document.getElementById('revealStartMinigameBtn');
+    if (revealStartMinigameBtn) {
+        revealStartMinigameBtn.addEventListener('click', startMinigameFromReveal);
+    }
+    
+    const revealMinigameType = document.getElementById('revealMinigameType');
+    if (revealMinigameType) {
+        revealMinigameType.addEventListener('change', (e) => {
+            const promptInput = document.getElementById('revealMinigamePrompt');
+            if (promptInput) {
+                promptInput.style.display = e.target.value === 'draw_prompt' ? 'block' : 'none';
+            }
+        });
+    }
+    
     // Skip to answer / show results
     document.getElementById('skipBtn').addEventListener('click', () => {
         sendToHost({ type: 'skip_question' });
@@ -424,6 +455,19 @@ function handleMessage(data) {
             
         case 'steal_winner':
             showStealWinner(data);
+            break;
+        
+        // Minigame events
+        case 'minigame_start':
+            showMinigameHost(data);
+            break;
+            
+        case 'minigame_end':
+            showMinigameResults(data);
+            break;
+            
+        case 'minigame_submission':
+            addMinigameSubmission(data);
             break;
     }
 }
@@ -1584,6 +1628,147 @@ function renderTeamPodium(teamLeaderboard) {
         
         podium.appendChild(runnersDiv);
     }
+}
+
+// ─────────────────────────── Minigame Functions ─────────────────────────── #
+
+function startMinigame() {
+    const minigameType = document.getElementById('minigameType').value;
+    const prompt = document.getElementById('minigamePrompt').value;
+    const duration = parseInt(document.getElementById('minigameDuration').value) || 60;
+    
+    sendToHost({
+        type: 'start_minigame',
+        minigame_type: minigameType,
+        prompt: minigameType === 'draw_prompt' ? prompt : null,
+        duration: duration
+    });
+}
+
+function startMinigameFromReveal() {
+    const minigameType = document.getElementById('revealMinigameType').value;
+    const prompt = document.getElementById('revealMinigamePrompt').value;
+    const duration = parseInt(document.getElementById('revealMinigameDuration').value) || 60;
+    
+    sendToHost({
+        type: 'start_minigame',
+        minigame_type: minigameType,
+        prompt: minigameType === 'draw_prompt' ? prompt : null,
+        duration: duration
+    });
+}
+
+function showMinigameHost(data) {
+    const minigameType = data.minigame_type || 'draw_freestyle';
+    const prompt = data.prompt || '';
+    
+    document.getElementById('minigameTitleHost').textContent = minigameType === 'draw_prompt' ? '🎨 DRAW IT!' : '🎨 FREE DRAW';
+    document.getElementById('minigamePromptHost').textContent = prompt || 'Players are drawing...';
+    
+    // Clear submissions
+    const submissionsEl = document.getElementById('minigameSubmissions');
+    submissionsEl.innerHTML = '<p class="waiting-submissions">Waiting for submissions...</p>';
+    
+    // Start timer if duration is set
+    if (data.duration && data.duration > 0) {
+        startMinigameTimerHost(data.duration);
+    }
+    
+    showScreen('minigameScreen');
+    
+    // Setup end button
+    const endBtn = document.getElementById('endMinigameBtn');
+    if (endBtn) {
+        endBtn.onclick = () => {
+            sendToHost({ type: 'end_minigame' });
+        };
+    }
+}
+
+function startMinigameTimerHost(duration) {
+    const timerEl = document.getElementById('minigameTimerHost');
+    if (!timerEl) return;
+    
+    let timeLeft = duration;
+    timerEl.textContent = `Time: ${timeLeft}s`;
+    
+    if (state.minigameTimerInterval) {
+        clearInterval(state.minigameTimerInterval);
+    }
+    
+    state.minigameTimerInterval = setInterval(() => {
+        timeLeft--;
+        if (timerEl) {
+            timerEl.textContent = `Time: ${timeLeft}s`;
+        }
+        if (timeLeft <= 0) {
+            clearInterval(state.minigameTimerInterval);
+            state.minigameTimerInterval = null;
+        }
+    }, 1000);
+}
+
+function addMinigameSubmission(data) {
+    const submissionsEl = document.getElementById('minigameSubmissions');
+    if (!submissionsEl) return;
+    
+    // Remove waiting message if present
+    const waitingMsg = submissionsEl.querySelector('.waiting-submissions');
+    if (waitingMsg) {
+        waitingMsg.remove();
+    }
+    
+    // Check if submission already exists
+    let existingCard = submissionsEl.querySelector(`[data-player-id="${data.player_id}"]`);
+    
+    if (!existingCard) {
+        existingCard = document.createElement('div');
+        existingCard.className = 'minigame-submission-card';
+        existingCard.dataset.playerId = data.player_id;
+        existingCard.innerHTML = `
+            <div class="submission-header">
+                <span class="submission-player">${escapeHtml(data.player_name)}</span>
+            </div>
+            <div class="submission-image-container">
+                <img class="submission-image" src="${data.data}" alt="Drawing by ${escapeHtml(data.player_name)}">
+            </div>
+        `;
+        submissionsEl.appendChild(existingCard);
+    } else {
+        // Update existing submission
+        const img = existingCard.querySelector('.submission-image');
+        if (img) {
+            img.src = data.data;
+        }
+    }
+}
+
+function showMinigameResults(data) {
+    // Show all submissions
+    const submissionsEl = document.getElementById('minigameSubmissions');
+    if (!submissionsEl) return;
+    
+    if (data.submissions && data.submissions.length > 0) {
+        submissionsEl.innerHTML = '';
+        data.submissions.forEach(submission => {
+            const card = document.createElement('div');
+            card.className = 'minigame-submission-card';
+            card.innerHTML = `
+                <div class="submission-header">
+                    <span class="submission-player">${escapeHtml(submission.player_name)}</span>
+                </div>
+                <div class="submission-image-container">
+                    <img class="submission-image" src="${submission.data}" alt="Drawing by ${escapeHtml(submission.player_name)}">
+                </div>
+            `;
+            submissionsEl.appendChild(card);
+        });
+    }
+    
+    // After a delay, return to previous screen
+    setTimeout(() => {
+        // The server will send room_state to return to previous state
+    }, 5000);
 }
 
 // ─────────────────────────── Start ─────────────────────────── #

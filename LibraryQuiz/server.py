@@ -263,7 +263,7 @@ class Team:
         }
 
 class GameRoom:
-    STATES = ["lobby", "question", "reveal", "leaderboard", "finished"]
+    STATES = ["lobby", "question", "reveal", "leaderboard", "finished", "minigame"]
     
     def __init__(self, room_code: str):
         self.code = room_code
@@ -292,6 +292,11 @@ class GameRoom:
         self.steal_eligible = []    # team_ids that can still steal
         self.awaiting_judgment = False
         self.bowl_phase = None      # "buzzing", "answering", "stealing", None
+        
+        # Minigame support
+        self.minigame_state = None  # {"type": str, "prompt": str, "start_time": float, "duration": int}
+        self.minigame_submissions: dict[str, dict] = {}  # player_id -> {"data": str, "player_name": str, "timestamp": float}
+        self.previous_state = None  # State to return to after minigame
         
     def add_player(self, player: Player):
         self.players[player.id] = player
@@ -430,7 +435,7 @@ class GameRoom:
         return leaderboard
     
     def to_lobby_state(self):
-        return {
+        state_data = {
             "room_code": self.code,
             "state": self.state,
             "players": [{"id": p.id, "name": p.name, "team_id": p.team_id} for p in self.players.values()],
@@ -439,6 +444,10 @@ class GameRoom:
             "teams": {tid: t.to_dict() for tid, t in self.teams.items()},
             "game_mode": self.game_mode
         }
+        # Include minigame state if active
+        if self.state == "minigame" and self.minigame_state:
+            state_data["minigame_state"] = self.minigame_state
+        return state_data
     
     def to_full_state(self):
         """Get full game state for reconnection/mid-game join"""
@@ -472,6 +481,10 @@ class GameRoom:
                     state_data["current_question"]["answers"] = question.get("answers", [])
                 elif q_type == "truefalse":
                     state_data["current_question"]["answers"] = ["TRUE", "FALSE"]
+        
+        # Include minigame state if active
+        if self.state == "minigame" and self.minigame_state:
+            state_data["minigame_state"] = self.minigame_state
         
         return state_data
     
@@ -830,6 +843,83 @@ async def end_game(room: GameRoom):
     await broadcast_to_room(room, game_over_msg)
 
 
+# ─────────────────────────── Minigame Logic ─────────────────────────── #
+
+async def start_minigame(room: GameRoom, minigame_type: str, prompt: str = None, duration: int = 60):
+    """Start a minigame"""
+    room.previous_state = room.state  # Save state to return to
+    room.state = "minigame"
+    room.minigame_state = {
+        "type": minigame_type,
+        "prompt": prompt,
+        "start_time": time.time(),
+        "duration": duration
+    }
+    room.minigame_submissions = {}
+    
+    # Broadcast minigame start to all players
+    minigame_msg = {
+        "type": "minigame_start",
+        "minigame_type": minigame_type,
+        "prompt": prompt,
+        "duration": duration
+    }
+    
+    await broadcast_to_room(room, minigame_msg)
+    
+    # If duration is set, auto-end after duration
+    if duration > 0:
+        asyncio.create_task(minigame_timer(room, duration))
+
+
+async def minigame_timer(room: GameRoom, duration: int):
+    """Timer for minigame - ends when time runs out"""
+    await asyncio.sleep(duration)
+    
+    if room.state == "minigame":
+        await end_minigame(room)
+
+
+async def end_minigame(room: GameRoom):
+    """End the current minigame and return to previous state"""
+    if room.state != "minigame":
+        return
+    
+    # Prepare submissions for display
+    submissions_list = []
+    for player_id, submission in room.minigame_submissions.items():
+        player = room.players.get(player_id)
+        if player:
+            submissions_list.append({
+                "player_id": player_id,
+                "player_name": player.name,
+                "data": submission.get("data"),
+                "timestamp": submission.get("timestamp")
+            })
+    
+    # Broadcast minigame end with all submissions
+    end_msg = {
+        "type": "minigame_end",
+        "submissions": submissions_list,
+        "minigame_type": room.minigame_state.get("type") if room.minigame_state else None
+    }
+    
+    await broadcast_to_room(room, end_msg)
+    
+    # Return to previous state
+    room.state = room.previous_state if room.previous_state else "lobby"
+    room.minigame_state = None
+    room.minigame_submissions = {}
+    room.previous_state = None
+    
+    # Notify players of state change
+    if room.state == "lobby":
+        await broadcast_to_room(room, {
+            "type": "room_state",
+            **room.to_lobby_state()
+        })
+
+
 # ─────────────────────────── Room Cleanup ─────────────────────────── #
 
 async def cleanup_inactive_rooms():
@@ -973,6 +1063,10 @@ async def player_websocket(websocket: WebSocket, room_code: str, player_id: str)
         "team_id": player.team_id,
         "team": room.teams[player.team_id].to_dict() if player.team_id and player.team_id in room.teams else None
     }
+    
+    # Include minigame state if active
+    if room.state == "minigame" and room.minigame_state:
+        join_msg["minigame_state"] = room.minigame_state
     
     # If game is in progress, send current question info
     if room.state == "question" and room.current_question_idx >= 0:
@@ -1229,6 +1323,21 @@ async def handle_host_message(room: GameRoom, data: dict):
         
         room.state = "reveal"
         room.reset_bowl_state()
+    
+    # ─────────────────────────── Minigame Host Handlers ─────────────────────────── #
+    
+    elif msg_type == "start_minigame":
+        minigame_type = data.get("minigame_type", "draw_freestyle")
+        prompt = data.get("prompt")
+        duration = data.get("duration", 60)
+        
+        # Can start minigame from lobby or after reveal
+        if room.state in ["lobby", "reveal"]:
+            await start_minigame(room, minigame_type, prompt, duration)
+    
+    elif msg_type == "end_minigame":
+        if room.state == "minigame":
+            await end_minigame(room)
 
 
 async def handle_player_message(room: GameRoom, player: Player, data: dict):
@@ -1383,6 +1492,35 @@ async def handle_player_message(room: GameRoom, player: Player, data: dict):
             await send_to_player(player, {
                 "type": "steal_not_eligible",
                 "message": "Your team already attempted or was too slow."
+            })
+    
+    # ─────────────────────────── Minigame Handlers ─────────────────────────── #
+    
+    elif msg_type == "minigame_submit":
+        # Player submitting minigame answer (drawing, etc.)
+        if room.state != "minigame":
+            return
+        
+        submission_data = data.get("data")
+        if submission_data:
+            room.minigame_submissions[player.id] = {
+                "data": submission_data,
+                "player_name": player.name,
+                "timestamp": time.time()
+            }
+            
+            # Notify host of new submission
+            await send_to_host(room, {
+                "type": "minigame_submission",
+                "player_id": player.id,
+                "player_name": player.name,
+                "data": submission_data
+            })
+            
+            # Confirm to player
+            await send_to_player(player, {
+                "type": "minigame_submission_received",
+                "message": "Submission received!"
             })
 
 

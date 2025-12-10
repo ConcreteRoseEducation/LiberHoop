@@ -1346,6 +1346,190 @@ html, body {
     transition: all 0.2s;
 }
 
+/* ─────────────────────────── Minigame Controls ─────────────────────────── */
+
+.minigame-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    margin-top: 1rem;
+}
+
+.minigame-controls label {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.minigame-controls select,
+.minigame-controls input[type="text"],
+.minigame-controls input[type="number"] {
+    padding: 0.75rem;
+    font-size: 1rem;
+    font-family: inherit;
+    background: var(--bg-card);
+    border: 2px solid var(--primary);
+    border-radius: 8px;
+    color: var(--text);
+}
+
+.minigame-btn {
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), #e84393);
+    border: none;
+    border-radius: 8px;
+    color: white;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.minigame-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(253, 121, 168, 0.4);
+}
+
+.minigame-btn:active {
+    transform: translateY(0);
+}
+
+.minigame-controls-inline {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.minigame-controls-inline select,
+.minigame-controls-inline input {
+    padding: 0.5rem;
+    font-size: 0.9rem;
+    background: var(--bg-card);
+    border: 2px solid var(--primary);
+    border-radius: 8px;
+    color: var(--text);
+}
+
+.minigame-btn-small {
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), #e84393);
+    border: none;
+    border-radius: 8px;
+    color: white;
+    cursor: pointer;
+}
+
+.reveal-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    align-items: center;
+    margin-top: 2rem;
+}
+
+/* ─────────────────────────── Minigame Screen ─────────────────────────── */
+
+#minigameScreen {
+    padding: 2rem;
+    overflow-y: auto;
+}
+
+.minigame-header-host {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.minigame-header-host h2 {
+    font-size: 3rem;
+    font-weight: 900;
+    margin-bottom: 1rem;
+    color: var(--accent);
+}
+
+.minigame-prompt-host {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+}
+
+.minigame-timer-host {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--warning);
+    margin-bottom: 1rem;
+}
+
+.end-minigame-btn {
+    padding: 1rem 2rem;
+    font-size: 1.2rem;
+    font-weight: 800;
+    background: var(--danger);
+    border: none;
+    border-radius: 12px;
+    color: white;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.end-minigame-btn:hover {
+    transform: scale(1.05);
+}
+
+.minigame-submissions {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+    margin-top: 2rem;
+}
+
+.waiting-submissions {
+    grid-column: 1 / -1;
+    text-align: center;
+    font-size: 1.5rem;
+    color: var(--text-muted);
+    padding: 2rem;
+}
+
+.minigame-submission-card {
+    background: var(--bg-card);
+    border-radius: 12px;
+    padding: 1rem;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    animation: popIn 0.3s ease;
+}
+
+.submission-header {
+    margin-bottom: 0.5rem;
+}
+
+.submission-player {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.submission-image-container {
+    width: 100%;
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.submission-image {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
 .skip-steal-btn:hover {
     border-color: var(--danger);
     color: var(--danger);

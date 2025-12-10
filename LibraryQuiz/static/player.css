@@ -1107,3 +1107,136 @@ html, body {
     color: var(--text-muted);
 }
 
+/* ─────────────────────────── Minigame Screen ─────────────────────────── */
+
+#minigameScreen {
+    padding: 1rem;
+    overflow-y: auto;
+}
+
+.minigame-header {
+    text-align: center;
+    margin-bottom: 1rem;
+}
+
+.minigame-header h2 {
+    font-size: 2rem;
+    font-weight: 900;
+    margin-bottom: 0.5rem;
+    color: var(--accent);
+}
+
+.minigame-prompt {
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+}
+
+.minigame-timer {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--warning);
+}
+
+.minigame-content {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.drawing-container {
+    width: 100%;
+    background: white;
+    border-radius: 12px;
+    padding: 10px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+#drawingCanvas {
+    width: 100%;
+    height: auto;
+    display: block;
+    border-radius: 8px;
+    touch-action: none;
+    cursor: crosshair;
+}
+
+.drawing-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: var(--bg-card);
+    border-radius: 12px;
+}
+
+.color-picker,
+.brush-size {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.color-picker label,
+.brush-size label {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+.color-picker input[type="color"] {
+    width: 50px;
+    height: 40px;
+    border: 2px solid var(--primary);
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.brush-size input[type="range"] {
+    width: 100px;
+}
+
+.brush-size span {
+    min-width: 30px;
+    text-align: center;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.clear-btn,
+.submit-minigame-btn {
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+    font-weight: 700;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.clear-btn {
+    background: var(--danger);
+    color: white;
+}
+
+.clear-btn:active {
+    transform: scale(0.95);
+}
+
+.submit-minigame-btn {
+    background: linear-gradient(135deg, var(--success), #00a884);
+    color: white;
+    font-weight: 800;
+}
+
+.submit-minigame-btn:active {
+    transform: scale(0.95);
+}
+
+.submit-minigame-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+

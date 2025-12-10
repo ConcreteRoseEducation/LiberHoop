@@ -4,38 +4,38 @@ overview: Add minigame system with drawing games for waiting room and optional m
 todos:
   - id: backend_minigame_state
     content: Add minigame state fields to GameRoom class and update STATES list
-    status: pending
+    status: completed
   - id: backend_minigame_handlers
     content: Implement minigame message handlers (start_minigame, end_minigame, minigame_submit)
-    status: pending
+    status: completed
     dependencies:
       - backend_minigame_state
   - id: player_minigame_ui
     content: Create minigame screen HTML with canvas element in index.html
-    status: pending
+    status: completed
   - id: player_drawing_canvas
     content: Implement canvas drawing functionality with touch/mouse support in player.js
-    status: pending
+    status: completed
     dependencies:
       - player_minigame_ui
   - id: player_minigame_logic
     content: Add showMinigame() and minigame submission handling in player.js
-    status: pending
+    status: completed
     dependencies:
       - player_drawing_canvas
   - id: host_minigame_controls
     content: Add minigame start/end controls and type selector in host UI
-    status: pending
+    status: completed
     dependencies:
       - backend_minigame_handlers
   - id: host_minigame_display
     content: Implement display of player submissions on host screen
-    status: pending
+    status: completed
     dependencies:
       - host_minigame_controls
   - id: styling
     content: Add CSS styling for minigame screens and canvas controls
-    status: pending
+    status: completed
     dependencies:
       - player_minigame_ui
       - host_minigame_controls
