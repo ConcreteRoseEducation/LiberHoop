@@ -28,7 +28,10 @@ const state = {
     bowlPhase: null,  // 'buzzing', 'answering', 'stealing'
     buzzWinner: null,
     buzzTeam: null,
-    awaitingJudgment: false
+    awaitingJudgment: false,
+    // Minigame state
+    previousScreen: 'lobbyScreen',
+    minigameTimerInterval: null
 };
 
 // ─────────────────────────── Initialization ─────────────────────────── #
@@ -347,15 +350,30 @@ function handleMessage(data) {
     switch (data.type) {
         case 'room_state':
             updateLobby(data);
-            // Handle reconnection - restore to correct screen
-            if (state.reconnecting) {
-                state.reconnecting = false;
+            // Handle reconnection or state change - restore to correct screen
+            if (state.reconnecting || data.return_to_reveal) {
+                if (state.reconnecting) {
+                    state.reconnecting = false;
+                }
                 if (data.state === 'finished') {
                     showScreen('leaderboardScreen');
-                } else if (data.state === 'question' || data.state === 'reveal') {
+                } else if (data.state === 'question') {
                     showScreen('questionScreen');
+                } else if (data.state === 'reveal' || data.return_to_reveal) {
+                    // Return to reveal screen if we were there before minigame
+                    showScreen('revealScreen');
+                } else if (data.state === 'lobby') {
+                    showScreen('lobbyScreen');
                 }
-                console.log('Reconnected to room in state:', data.state);
+                console.log('State changed to:', data.state);
+            }
+            // Also handle normal state updates (not just reconnection)
+            if (!state.reconnecting && !data.return_to_reveal) {
+                if (data.state === 'reveal' && document.getElementById('revealScreen').classList.contains('active')) {
+                    // Already on reveal screen, stay there
+                } else if (data.state === 'lobby' && !document.getElementById('minigameScreen').classList.contains('active')) {
+                    showScreen('lobbyScreen');
+                }
             }
             break;
             
@@ -1632,23 +1650,18 @@ function renderTeamPodium(teamLeaderboard) {
 
 // ─────────────────────────── Minigame Functions ─────────────────────────── #
 
-function startMinigame() {
-    const minigameType = document.getElementById('minigameType').value;
-    const prompt = document.getElementById('minigamePrompt').value;
-    const duration = parseInt(document.getElementById('minigameDuration').value) || 60;
-    
-    sendToHost({
-        type: 'start_minigame',
-        minigame_type: minigameType,
-        prompt: minigameType === 'draw_prompt' ? prompt : null,
-        duration: duration
-    });
-}
-
 function startMinigameFromReveal() {
     const minigameType = document.getElementById('revealMinigameType').value;
     const prompt = document.getElementById('revealMinigamePrompt').value;
     const duration = parseInt(document.getElementById('revealMinigameDuration').value) || 60;
+    
+    // For microgames, don't send to server (client-side only)
+    if (minigameType === 'microgame') {
+        // Microgames are client-side only, but we could broadcast a message
+        // For now, just show a message that microgames are player-only
+        alert('Microgames are available for players in the lobby. Use drawing games for synchronized minigames.');
+        return;
+    }
     
     sendToHost({
         type: 'start_minigame',
@@ -1662,12 +1675,20 @@ function showMinigameHost(data) {
     const minigameType = data.minigame_type || 'draw_freestyle';
     const prompt = data.prompt || '';
     
+    // Store current screen to return to
+    const currentScreen = document.querySelector('.screen.active');
+    if (currentScreen) {
+        state.previousScreen = currentScreen.id;
+    }
+    
     document.getElementById('minigameTitleHost').textContent = minigameType === 'draw_prompt' ? '🎨 DRAW IT!' : '🎨 FREE DRAW';
     document.getElementById('minigamePromptHost').textContent = prompt || 'Players are drawing...';
     
     // Clear submissions
     const submissionsEl = document.getElementById('minigameSubmissions');
-    submissionsEl.innerHTML = '<p class="waiting-submissions">Waiting for submissions...</p>';
+    if (submissionsEl) {
+        submissionsEl.innerHTML = '<p class="waiting-submissions">Waiting for submissions...</p>';
+    }
     
     // Start timer if duration is set
     if (data.duration && data.duration > 0) {
@@ -1768,7 +1789,8 @@ function showMinigameResults(data) {
     // After a delay, return to previous screen
     setTimeout(() => {
         // The server will send room_state to return to previous state
-    }, 5000);
+        // We'll handle it in the room_state case
+    }, 3000);
 }
 
 // ─────────────────────────── Start ─────────────────────────── #

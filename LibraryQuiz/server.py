@@ -912,11 +912,18 @@ async def end_minigame(room: GameRoom):
     room.minigame_submissions = {}
     room.previous_state = None
     
-    # Notify players of state change
+    # Notify all clients of state change
     if room.state == "lobby":
         await broadcast_to_room(room, {
             "type": "room_state",
             **room.to_lobby_state()
+        })
+    elif room.state == "reveal":
+        # Send room_state to host to return to reveal screen
+        await send_to_host(room, {
+            "type": "room_state",
+            "state": room.state,
+            "return_to_reveal": True
         })
 
 
@@ -1331,8 +1338,9 @@ async def handle_host_message(room: GameRoom, data: dict):
         prompt = data.get("prompt")
         duration = data.get("duration", 60)
         
-        # Can start minigame from lobby or after reveal
-        if room.state in ["lobby", "reveal"]:
+        # Can only start synchronized minigame after reveal (not in lobby)
+        # Lobby minigames are player-controlled and client-side only
+        if room.state == "reveal":
             await start_minigame(room, minigame_type, prompt, duration)
     
     elif msg_type == "end_minigame":

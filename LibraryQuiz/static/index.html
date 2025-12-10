@@ -71,6 +71,25 @@
                 </div>
                 <p>Waiting for host to start...</p>
             </div>
+            
+            <!-- Minigame Selection -->
+            <div class="lobby-minigames">
+                <h3>🎮 Play a Minigame</h3>
+                <div class="minigame-buttons">
+                    <button class="minigame-option-btn" data-type="draw_freestyle">
+                        🎨 Free Draw
+                    </button>
+                    <button class="minigame-option-btn" data-type="draw_prompt">
+                        ✏️ Draw Prompt
+                    </button>
+                    <button class="minigame-option-btn" data-type="microgame">
+                        ⚡ Microgame
+                    </button>
+                </div>
+                <div class="minigame-prompt-input hidden" id="lobbyPromptInput">
+                    <input type="text" id="lobbyMinigamePrompt" placeholder="Enter a prompt to draw..." maxlength="50">
+                </div>
+            </div>
         </div>
 
         <!-- Question Screen -->
@@ -198,7 +217,7 @@
                 </div>
                 
                 <!-- Drawing Controls -->
-                <div class="drawing-controls">
+                <div class="drawing-controls" id="drawingControls">
                     <div class="color-picker">
                         <label>Color:</label>
                         <input type="color" id="colorPicker" value="#000000">
@@ -210,6 +229,11 @@
                     </div>
                     <button class="clear-btn" id="clearCanvasBtn">Clear</button>
                     <button class="submit-minigame-btn" id="submitMinigameBtn">Submit</button>
+                </div>
+                
+                <!-- Microgame UI -->
+                <div class="microgame-ui" id="microgameUI" style="display: none;">
+                    <!-- Content generated dynamically -->
                 </div>
             </div>
         </div>

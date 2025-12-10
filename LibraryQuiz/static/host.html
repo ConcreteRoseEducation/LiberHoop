@@ -109,19 +109,6 @@
                     </select>
                 </div>
                 
-                <div class="minigame-controls">
-                    <label>MINIGAME</label>
-                    <select id="minigameType">
-                        <option value="draw_freestyle">Free Draw</option>
-                        <option value="draw_prompt">Draw Prompt</option>
-                    </select>
-                    <input type="text" id="minigamePrompt" placeholder="Prompt (for draw_prompt)" style="display: none;">
-                    <input type="number" id="minigameDuration" value="60" min="10" max="300" placeholder="Duration (seconds)">
-                    <button id="startMinigameBtn" class="minigame-btn">
-                        🎨 START MINIGAME
-                    </button>
-                </div>
-                
                 <button id="startGameBtn" class="start-btn" disabled>
                     START GAME
                 </button>
@@ -242,6 +229,7 @@
                 <select id="revealMinigameType">
                     <option value="draw_freestyle">Free Draw</option>
                     <option value="draw_prompt">Draw Prompt</option>
+                    <option value="microgame">Microgame</option>
                 </select>
                 <input type="text" id="revealMinigamePrompt" placeholder="Prompt (for draw_prompt)" style="display: none;">
                 <input type="number" id="revealMinigameDuration" value="60" min="10" max="300" placeholder="Duration">

@@ -31,7 +31,11 @@ const state = {
     lastX: 0,
     lastY: 0,
     currentColor: '#000000',
-    brushSize: 5
+    brushSize: 5,
+    currentMicrogame: null,
+    microgameScore: 0,
+    microgameRound: 0,
+    minigameTimerInterval: null
 };
 
 // ─────────────────────────── Screens ─────────────────────────── #
@@ -935,7 +939,47 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+    
+    // Lobby minigame buttons (client-side only)
+    document.querySelectorAll('.minigame-option-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const minigameType = btn.dataset.type;
+            if (minigameType === 'draw_prompt') {
+                // Show prompt input
+                const promptInput = document.getElementById('lobbyPromptInput');
+                if (promptInput) {
+                    promptInput.classList.remove('hidden');
+                    const input = document.getElementById('lobbyMinigamePrompt');
+                    if (input) input.focus();
+                }
+                // Start minigame when prompt is entered
+                const promptField = document.getElementById('lobbyMinigamePrompt');
+                if (promptField) {
+                    const startHandler = (e) => {
+                        if (e.key === 'Enter' && promptField.value.trim()) {
+                            startLocalMinigame('draw_prompt', promptField.value.trim());
+                            promptInput.classList.add('hidden');
+                            promptField.removeEventListener('keypress', startHandler);
+                        }
+                    };
+                    promptField.addEventListener('keypress', startHandler);
+                }
+            } else {
+                startLocalMinigame(minigameType);
+            }
+        });
+    });
 });
+
+function startLocalMinigame(minigameType, prompt = null) {
+    // Client-side only minigame (no server sync)
+    showMinigame({
+        minigame_type: minigameType,
+        prompt: prompt,
+        duration: 0, // No timer for local minigames
+        local: true
+    });
+}
 
 // ─────────────────────────── Minigame Functions ─────────────────────────── #
 
@@ -945,9 +989,24 @@ function showMinigame(data) {
     const minigameType = data.minigame_type || 'draw_freestyle';
     const prompt = data.prompt || '';
     
-    // Update UI
+    // Update UI based on minigame type
+    if (minigameType === 'microgame') {
+        showMicrogame(data);
+        return;
+    }
+    
+    // Drawing games
     document.getElementById('minigameTitle').textContent = minigameType === 'draw_prompt' ? '🎨 DRAW IT!' : '🎨 FREE DRAW';
     document.getElementById('minigamePrompt').textContent = prompt || 'Draw anything you want!';
+    
+    // Show drawing container, hide microgame UI
+    const drawingContainer = document.getElementById('drawingContainer');
+    const drawingControls = document.getElementById('drawingControls');
+    const microgameUI = document.getElementById('microgameUI');
+    
+    if (drawingContainer) drawingContainer.style.display = 'block';
+    if (drawingControls) drawingControls.style.display = 'flex';
+    if (microgameUI) microgameUI.style.display = 'none';
     
     // Initialize canvas
     initDrawingCanvas();
@@ -960,8 +1019,226 @@ function showMinigame(data) {
     showScreen('minigameScreen');
 }
 
+function showMicrogame(data) {
+    // Hide drawing UI, show microgame UI
+    const drawingContainer = document.getElementById('drawingContainer');
+    const drawingControls = document.getElementById('drawingControls');
+    const microgameUI = document.getElementById('microgameUI');
+    
+    if (drawingContainer) drawingContainer.style.display = 'none';
+    if (drawingControls) drawingControls.style.display = 'none';
+    if (microgameUI) {
+        microgameUI.style.display = 'block';
+        microgameUI.classList.remove('hidden');
+    }
+    
+    const titleEl = document.getElementById('minigameTitle');
+    const promptEl = document.getElementById('minigamePrompt');
+    if (titleEl) titleEl.textContent = '⚡ MICROGAME';
+    if (promptEl) promptEl.textContent = 'Get ready...';
+    
+    // Start a random microgame
+    startRandomMicrogame();
+    
+    showScreen('minigameScreen');
+}
+
+function startRandomMicrogame() {
+    const games = [
+        'tap_when_red',
+        'quick_math',
+        'count_clicks'
+    ];
+    const gameType = games[Math.floor(Math.random() * games.length)];
+    
+    state.currentMicrogame = gameType;
+    state.microgameScore = 0;
+    state.microgameRound = 0;
+    
+    runMicrogame(gameType);
+}
+
+function runMicrogame(gameType) {
+    const microgameUI = document.getElementById('microgameUI');
+    if (!microgameUI) {
+        console.error('Microgame UI not found');
+        return;
+    }
+    
+    state.microgameRound++;
+    
+    if (gameType === 'tap_when_red') {
+        // Tap when the screen turns red
+        microgameUI.innerHTML = `
+            <div class="microgame-instruction">Tap when the screen turns RED!</div>
+            <div class="microgame-display" id="microgameDisplay" style="background: #3498db; width: 100%; height: 300px; border-radius: 12px; margin: 1rem 0;"></div>
+            <div class="microgame-score">Score: <span id="microgameScore">0</span></div>
+        `;
+        
+        const display = document.getElementById('microgameDisplay');
+        let clicked = false;
+        
+        const clickHandler = () => {
+            if (!clicked && display.style.background === 'rgb(231, 76, 60)') {
+                clicked = true;
+                state.microgameScore++;
+                document.getElementById('microgameScore').textContent = state.microgameScore;
+                display.textContent = '✓ CORRECT!';
+                display.style.background = '#2ecc71';
+                setTimeout(() => {
+                    if (state.microgameRound < 5) {
+                        runMicrogame(gameType);
+                    } else {
+                        endLocalMinigame();
+                    }
+                }, 1000);
+            } else if (!clicked) {
+                // Too early
+                display.textContent = '✗ TOO EARLY!';
+                display.style.background = '#e74c3c';
+                setTimeout(() => {
+                    if (state.microgameRound < 5) {
+                        runMicrogame(gameType);
+                    } else {
+                        endLocalMinigame();
+                    }
+                }, 1000);
+            }
+        };
+        
+        display.addEventListener('click', clickHandler);
+        display.addEventListener('touchstart', clickHandler);
+        
+        // Change to red after random delay (1-3 seconds)
+        const delay = 1000 + Math.random() * 2000;
+        setTimeout(() => {
+            if (!clicked) {
+                display.style.background = '#e74c3c'; // Red
+            }
+        }, delay);
+        
+        // Auto-advance if not clicked
+        setTimeout(() => {
+            if (!clicked && state.microgameRound < 5) {
+                runMicrogame(gameType);
+            } else if (!clicked) {
+                endLocalMinigame();
+            }
+        }, delay + 2000);
+        
+    } else if (gameType === 'quick_math') {
+        // Quick math problems
+        const a = Math.floor(Math.random() * 20) + 1;
+        const b = Math.floor(Math.random() * 20) + 1;
+        const answer = a + b;
+        
+        microgameUI.innerHTML = `
+            <div class="microgame-instruction">Solve quickly!</div>
+            <div class="microgame-question">${a} + ${b} = ?</div>
+            <div class="microgame-options">
+                <button class="microgame-option" data-answer="${answer}">${answer}</button>
+                <button class="microgame-option" data-answer="${answer + Math.floor(Math.random() * 10) + 1}">${answer + Math.floor(Math.random() * 10) + 1}</button>
+                <button class="microgame-option" data-answer="${Math.max(1, answer - Math.floor(Math.random() * 10) - 1)}">${Math.max(1, answer - Math.floor(Math.random() * 10) - 1)}</button>
+            </div>
+            <div class="microgame-score">Score: <span id="microgameScore">${state.microgameScore}</span></div>
+        `;
+        
+        // Shuffle options
+        const options = microgameUI.querySelectorAll('.microgame-option');
+        const optionsArray = Array.from(options);
+        optionsArray.sort(() => Math.random() - 0.5);
+        const container = microgameUI.querySelector('.microgame-options');
+        container.innerHTML = '';
+        optionsArray.forEach(opt => container.appendChild(opt));
+        
+        options.forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (parseInt(btn.dataset.answer) === answer) {
+                    state.microgameScore++;
+                    document.getElementById('microgameScore').textContent = state.microgameScore;
+                    btn.style.background = '#2ecc71';
+                } else {
+                    btn.style.background = '#e74c3c';
+                }
+                setTimeout(() => {
+                    if (state.microgameRound < 5) {
+                        runMicrogame(gameType);
+                    } else {
+                        endLocalMinigame();
+                    }
+                }, 1000);
+            });
+        });
+        
+    } else if (gameType === 'count_clicks') {
+        // Count the number of clicks shown
+        const target = Math.floor(Math.random() * 5) + 3;
+        
+        microgameUI.innerHTML = `
+            <div class="microgame-instruction">Count the clicks!</div>
+            <div class="microgame-display" id="microgameDisplay" style="width: 100%; height: 200px; border-radius: 12px; margin: 1rem 0; background: var(--bg-card); display: flex; align-items: center; justify-content: center; font-size: 3rem;">🔊</div>
+            <div class="microgame-input">
+                <input type="number" id="clickCountInput" placeholder="How many?" min="1" max="10">
+                <button id="submitCountBtn">Submit</button>
+            </div>
+            <div class="microgame-score">Score: <span id="microgameScore">${state.microgameScore}</span></div>
+        `;
+        
+        const display = document.getElementById('microgameDisplay');
+        let clickCount = 0;
+        
+        // Play clicks
+        const playClicks = () => {
+            for (let i = 0; i < target; i++) {
+                setTimeout(() => {
+                    display.textContent = '🔊';
+                    setTimeout(() => {
+                        display.textContent = '';
+                    }, 200);
+                }, i * 500);
+            }
+        };
+        
+        playClicks();
+        
+        document.getElementById('submitCountBtn').addEventListener('click', () => {
+            const guess = parseInt(document.getElementById('clickCountInput').value);
+            if (guess === target) {
+                state.microgameScore++;
+                document.getElementById('microgameScore').textContent = state.microgameScore;
+                display.textContent = '✓ CORRECT!';
+                display.style.background = '#2ecc71';
+            } else {
+                display.textContent = `✗ It was ${target}`;
+                display.style.background = '#e74c3c';
+            }
+            setTimeout(() => {
+                if (state.microgameRound < 5) {
+                    runMicrogame(gameType);
+                } else {
+                    endLocalMinigame();
+                }
+            }, 2000);
+        });
+    }
+}
+
+function endLocalMinigame() {
+    const microgameUI = document.getElementById('microgameUI');
+    if (microgameUI) {
+        microgameUI.innerHTML = `
+            <div class="microgame-result">
+                <h2>Game Over!</h2>
+                <p>Final Score: ${state.microgameScore}</p>
+                <button class="minigame-back-btn" onclick="hideMinigame()">Back to Lobby</button>
+            </div>
+        `;
+    }
+}
+
 function hideMinigame() {
     state.minigameState = null;
+    state.currentMicrogame = null;
     if (state.minigameTimerInterval) {
         clearInterval(state.minigameTimerInterval);
         state.minigameTimerInterval = null;
@@ -1131,18 +1408,25 @@ function stopDrawing() {
 }
 
 function submitMinigameAnswer() {
-    if (!state.drawingCanvas || !state.ws) return;
+    if (!state.drawingCanvas) return;
     
     // Convert canvas to base64
     const imageData = state.drawingCanvas.toDataURL('image/png');
     
-    // Send to server
-    state.ws.send(JSON.stringify({
-        type: 'minigame_submit',
-        minigame_type: state.minigameState?.minigame_type || 'draw_freestyle',
-        data: imageData,
-        prompt: state.minigameState?.prompt
-    }));
+    // Only send to server if it's a synchronized minigame (not local)
+    if (state.ws && state.minigameState && !state.minigameState.local) {
+        state.ws.send(JSON.stringify({
+            type: 'minigame_submit',
+            minigame_type: state.minigameState.minigame_type || 'draw_freestyle',
+            data: imageData,
+            prompt: state.minigameState.prompt
+        }));
+    } else {
+        // Local minigame - just show result
+        setTimeout(() => {
+            hideMinigame();
+        }, 2000);
+    }
 }
 
 // ─────────────────────────── Init ─────────────────────────── #
