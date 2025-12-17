@@ -70,6 +70,14 @@ body {
 
 .login-box .form-group {
     text-align: left;
+    margin-bottom: 1.5rem;
+}
+
+.form-help {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-top: 0.5rem;
+    font-style: italic;
 }
 
 .login-btn {

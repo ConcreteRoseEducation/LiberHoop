@@ -11,6 +11,7 @@ let adminName = '';
 let authMode = 'local';  // 'supabase' or 'local'
 let currentSession = null;  // Track current hosting session
 let sessionCheckInterval = null;
+let serverBaseUrl = '';  // Base URL for API calls (e.g., Cloudflare tunnel URL)
 
 // Question type labels
 const TYPE_LABELS = {
@@ -25,14 +26,61 @@ const TYPE_LABELS = {
 
 // ─────────────────────────── Initialization ─────────────────────────── #
 
-document.addEventListener('DOMContentLoaded', async () => {
-    // Check authentication mode
-    await checkAuthMode();
+// Helper function to get the API base URL
+function getApiUrl(path) {
+    // Remove leading slash if present to avoid double slashes
+    const cleanPath = path.startsWith('/') ? path.slice(1) : path;
     
-    // Check for saved token
-    adminToken = localStorage.getItem('adminToken');
-    if (adminToken) {
-        checkAuth();
+    // If we have a server URL, use it; otherwise use relative path (same origin)
+    if (serverBaseUrl) {
+        // Ensure serverBaseUrl doesn't end with a slash
+        const base = serverBaseUrl.endsWith('/') ? serverBaseUrl.slice(0, -1) : serverBaseUrl;
+        return `${base}/${cleanPath}`;
+    }
+    return `/${cleanPath}`;
+}
+
+// Load server URL from localStorage or detect if we're on the same server
+function loadServerUrl() {
+    const serverUrlInput = document.getElementById('serverUrl');
+    if (!serverUrlInput) return;
+    
+    // Check if we're on GitHub Pages or a different origin
+    const isGitHubPages = window.location.hostname.includes('github.io') || 
+                          window.location.hostname.includes('github.com');
+    
+    if (isGitHubPages) {
+        // On GitHub Pages - load saved server URL or show input
+        const savedUrl = localStorage.getItem('liberHoopServerUrl');
+        if (savedUrl) {
+            serverBaseUrl = savedUrl;
+            serverUrlInput.value = savedUrl;
+        }
+        // Field is already visible in HTML
+    } else {
+        // On the actual server - use same origin (empty string = relative paths)
+        serverBaseUrl = '';
+        // Hide the server URL input since we're on the server itself
+        const serverUrlGroup = serverUrlInput.closest('.form-group');
+        if (serverUrlGroup) {
+            serverUrlGroup.style.display = 'none';
+        }
+    }
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+    // Load server URL configuration
+    loadServerUrl();
+    
+    // Check authentication mode (only if we have a server URL or are on the server)
+    if (serverBaseUrl || !window.location.hostname.includes('github')) {
+        await checkAuthMode();
+        
+        // Check for saved token
+        adminToken = localStorage.getItem('adminToken');
+        if (adminToken) {
+            checkAuth();
+        }
     }
     
     setupEventListeners();
@@ -40,7 +88,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function checkAuthMode() {
     try {
-        const response = await fetch('/api/admin/auth-mode', {
+        const response = await fetch(getApiUrl('/api/admin/auth-mode'), {
             signal: AbortSignal.timeout(5000)
         });
         
@@ -84,15 +132,51 @@ function showLoginForm() {
 }
 
 function setupEventListeners() {
+    // Server URL input - save when changed
+    const serverUrlInput = document.getElementById('serverUrl');
+    if (serverUrlInput) {
+        serverUrlInput.addEventListener('change', (e) => {
+            const url = e.target.value.trim();
+            if (url) {
+                // Remove trailing slash
+                serverBaseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
+                localStorage.setItem('liberHoopServerUrl', serverBaseUrl);
+            }
+        });
+        
+        serverUrlInput.addEventListener('blur', (e) => {
+            const url = e.target.value.trim();
+            if (url) {
+                // Remove trailing slash
+                serverBaseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
+                localStorage.setItem('liberHoopServerUrl', serverBaseUrl);
+            }
+        });
+    }
+    
     // Login form
     document.getElementById('loginForm').addEventListener('submit', async (e) => {
         e.preventDefault();
+        // Save server URL before login
+        const urlInput = document.getElementById('serverUrl');
+        if (urlInput && urlInput.value.trim()) {
+            const url = urlInput.value.trim();
+            serverBaseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
+            localStorage.setItem('liberHoopServerUrl', serverBaseUrl);
+        }
         await login();
     });
     
     // Signup form
     document.getElementById('signupForm').addEventListener('submit', async (e) => {
         e.preventDefault();
+        // Save server URL before signup
+        const urlInput = document.getElementById('serverUrl');
+        if (urlInput && urlInput.value.trim()) {
+            const url = urlInput.value.trim();
+            serverBaseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
+            localStorage.setItem('liberHoopServerUrl', serverBaseUrl);
+        }
         await signup();
     });
     
@@ -202,7 +286,7 @@ async function login() {
     try {
         // Check service connectivity first
         try {
-            await fetch('/api/ip', {
+            await fetch(getApiUrl('/api/ip'), {
                 method: 'GET',
                 signal: AbortSignal.timeout(3000)
             });
@@ -212,7 +296,7 @@ async function login() {
             return;
         }
         
-        const response = await fetch('/api/admin/login', {
+        const response = await fetch(getApiUrl('/api/admin/login'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password }),
@@ -259,7 +343,7 @@ async function signup() {
     try {
         // Check service connectivity first
         try {
-            await fetch('/api/ip', {
+            await fetch(getApiUrl('/api/ip'), {
                 method: 'GET',
                 signal: AbortSignal.timeout(3000)
             });
@@ -269,7 +353,7 @@ async function signup() {
             return;
         }
         
-        const response = await fetch('/api/admin/signup', {
+        const response = await fetch(getApiUrl('/api/admin/signup'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name, username, password }),
@@ -310,7 +394,7 @@ async function signup() {
 
 async function checkAuth() {
     try {
-        const response = await fetch('/api/admin/me', {
+        const response = await fetch(getApiUrl('/api/admin/me'), {
             headers: { 'X-Admin-Token': adminToken },
             signal: AbortSignal.timeout(5000)
         });
@@ -359,7 +443,7 @@ function showAdminPanel() {
 
 async function checkSession() {
     try {
-        const response = await fetch('/api/admin/session', {
+        const response = await fetch(getApiUrl('/api/admin/session'), {
             headers: authHeaders()
         });
         
@@ -411,8 +495,9 @@ function startHosting() {
             return;
         }
     }
-    // Open host display in new window/tab
-    window.open('/host.html', '_blank');
+    // Use serverBaseUrl for host.html if we're connecting to a remote server
+    const hostUrl = serverBaseUrl ? `${serverBaseUrl}/host.html` : '/host.html';
+    window.open(hostUrl, '_blank');
 }
 
 function rejoinSession() {
@@ -421,7 +506,8 @@ function rejoinSession() {
         return;
     }
     // Open host display - it will reconnect to the existing room
-    window.open('/host.html', '_blank');
+    const hostUrl = serverBaseUrl ? `${serverBaseUrl}/host.html` : '/host.html';
+    window.open(hostUrl, '_blank');
 }
 
 async function restartSession() {
@@ -438,7 +524,7 @@ async function restartSession() {
     
     try {
         // Close the current session
-        await fetch('/api/admin/session/close', {
+        await fetch(getApiUrl('/api/admin/session/close'), {
             method: 'POST',
             headers: authHeaders()
         });
@@ -451,7 +537,8 @@ async function restartSession() {
         updateSessionUI();
         
         // Open new session
-        window.open('/host.html', '_blank');
+        const hostUrl = serverBaseUrl ? `${serverBaseUrl}/host.html` : '/host.html';
+        window.open(hostUrl, '_blank');
     } catch (err) {
         console.error('Error restarting session:', err);
         alert('Failed to restart session');
@@ -501,7 +588,7 @@ function authHeaders() {
 
 async function loadQuestions() {
     try {
-        const response = await fetch('/api/admin/questions', {
+        const response = await fetch(getApiUrl('/api/admin/questions'), {
             headers: authHeaders()
         });
         
@@ -767,7 +854,7 @@ async function saveQuestion() {
                 body: JSON.stringify(data)
             });
         } else {
-            response = await fetch('/api/admin/question', {
+            response = await fetch(getApiUrl('/api/admin/question'), {
                 method: 'POST',
                 headers: { ...authHeaders(), 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
@@ -827,7 +914,7 @@ async function createCategory() {
     const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '_');
     
     try {
-        const response = await fetch('/api/admin/category', {
+        const response = await fetch(getApiUrl('/api/admin/category'), {
             method: 'POST',
             headers: { ...authHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify({ id, name })
