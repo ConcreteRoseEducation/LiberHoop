@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Panel - Library Quiz Game</title>
+    <title>Host Panel - Library Quiz Game</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -14,7 +14,7 @@
     <div id="loginScreen" class="login-screen">
         <div class="login-box">
             <div class="login-logo">📚</div>
-            <h1>Quiz Admin</h1>
+            <h1>Quiz Host</h1>
             <p class="auth-mode-badge" id="authModeBadge"></p>
             
             <!-- Login Form -->
@@ -31,13 +31,13 @@
                 <p class="login-error" id="loginError"></p>
             </form>
             
-            <!-- Signup link (Supabase only) -->
-            <div id="signupLink" class="signup-link" style="display: none;">
+            <!-- Signup link -->
+            <div id="signupLink" class="signup-link">
                 <p>Need an account? <a href="#" onclick="showSignupForm()">Sign up</a></p>
             </div>
         </div>
         
-        <!-- Signup Form (Supabase only) -->
+        <!-- Signup Form -->
         <div class="login-box" id="signupBox" style="display: none;">
             <div class="login-logo">📚</div>
             <h1>Create Account</h1>
@@ -69,7 +69,7 @@
         <header class="admin-header">
             <div class="logo">
                 <span>📚</span>
-                <h1>Quiz Admin</h1>
+                <h1>Quiz Host</h1>
             </div>
             <div class="header-right">
                 <!-- No active session -->

@@ -130,14 +130,15 @@ async function checkAuthMode() {
         const badge = document.getElementById('authModeBadge');
         const signupLink = document.getElementById('signupLink');
         
+        // Always show signup link - signup works with both Supabase and local auth
+        signupLink.style.display = 'block';
+        
         if (authMode === 'supabase') {
             badge.textContent = '🔐 Supabase Database';
             badge.className = 'auth-mode-badge supabase';
-            signupLink.style.display = 'block';
         } else {
             badge.textContent = '🔑 Local Auth';
             badge.className = 'auth-mode-badge local';
-            signupLink.style.display = 'none';
         }
     } catch (err) {
         console.error('Failed to check auth mode:', err);

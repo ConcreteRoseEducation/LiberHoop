@@ -1828,10 +1828,7 @@ async def admin_login(request: Request):
 
 @app.post("/api/admin/signup")
 async def admin_signup(request: Request):
-    """Sign up a new admin - stores in Supabase database"""
-    if not supabase_client:
-        raise HTTPException(status_code=400, detail="Supabase not configured. Use local admins.json instead.")
-    
+    """Sign up a new admin/host - stores in Supabase database or local admins.json"""
     data = await request.json()
     username = data.get("username", "").strip()
     password = data.get("password", "")
@@ -1846,34 +1843,61 @@ async def admin_signup(request: Request):
     if len(password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
     
+    # Try Supabase database first
+    if supabase_client:
+        try:
+            # Check if username already exists
+            existing = supabase_client.table("admins").select("id").eq("username", username).execute()
+            if existing.data and len(existing.data) > 0:
+                raise HTTPException(status_code=400, detail="Username already taken")
+            
+            # Hash the password
+            password_hash = hash_password(password)
+            
+            # Insert new admin into database
+            result = supabase_client.table("admins").insert({
+                "username": username,
+                "password_hash": password_hash,
+                "name": name
+            }).execute()
+            
+            if result.data:
+                return {
+                    "status": "success",
+                    "message": "Account created! You can now log in."
+                }
+            else:
+                raise HTTPException(status_code=400, detail="Signup failed")
+                
+        except HTTPException:
+            raise
+        except Exception as e:
+            print(f"Supabase signup error: {e}")
+            raise HTTPException(status_code=400, detail="Signup failed. Please try again.")
+    
+    # Fallback to local authentication (when Supabase not configured)
     try:
+        admins = load_admins()
+        
         # Check if username already exists
-        existing = supabase_client.table("admins").select("id").eq("username", username).execute()
-        if existing.data and len(existing.data) > 0:
+        if username in admins["admins"]:
             raise HTTPException(status_code=400, detail="Username already taken")
         
-        # Hash the password
-        password_hash = hash_password(password)
-        
-        # Insert new admin into database
-        result = supabase_client.table("admins").insert({
-            "username": username,
-            "password_hash": password_hash,
+        # Add new admin to local JSON (using plain text password for consistency with existing local auth)
+        admins["admins"][username] = {
+            "password": password,
             "name": name
-        }).execute()
+        }
+        save_admins(admins)
         
-        if result.data:
-            return {
-                "status": "success",
-                "message": "Account created! You can now log in."
-            }
-        else:
-            raise HTTPException(status_code=400, detail="Signup failed")
-            
+        return {
+            "status": "success",
+            "message": "Account created! You can now log in."
+        }
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Signup error: {e}")
+        print(f"Local signup error: {e}")
         raise HTTPException(status_code=400, detail="Signup failed. Please try again.")
 
 
