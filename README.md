@@ -48,14 +48,19 @@ LiberHoop is a web-based quiz game platform that combines the competitive fun of
   - All player submissions displayed on host screen
   - Timer-based gameplay
 
-### 🔐 Authentication & Admin
+### 🔐 Authentication & Hosting
 
 - **Dual Authentication System**:
   - Supabase integration (cloud-based user management)
   - Local authentication fallback (JSON file-based)
-- Admin panel for question management
+- **Host Panel** for question management and game hosting
+- **Flexible Server Configuration**:
+  - Enter server URL on login (for connecting to remote servers)
+  - Automatic validation of server URLs
+  - Support for GitHub Pages frontend with separate backend server
 - Session management for hosts
 - Secure password hashing with bcrypt
+- Single login required - authentication persists across admin panel and host display
 
 ### 📊 Real-time Features
 
@@ -146,7 +151,7 @@ LibraryQuiz/
 
 - **Players**: `http://localhost:8000` (or public URL from tunnel)
 - **Host Display**: `http://localhost:8000/host.html`
-- **Admin Panel**: `http://localhost:8000/admin.html`
+- **Host Panel**: `http://localhost:8000/admin.html` (login to manage questions and host games)
 
 ## Usage
 
@@ -162,23 +167,29 @@ LibraryQuiz/
 
 ### For Hosts
 
-1. Log in to the admin panel
-2. Create a new room or join an existing session
-3. Select game mode (Classic or Bowl)
-4. Choose question categories
-5. Set number of questions and time limits
-6. Start the game!
-7. Control game flow (next question, reveal answers, etc.)
-8. Start minigames during breaks (after reveals)
+1. **Log in to the Host Panel** (`/admin.html`)
+   - Enter your server URL if connecting to a remote server (optional - leave blank to use current server)
+   - Enter your username and password
+   - Create an account if you don't have one (works with both Supabase and local authentication)
+2. **Manage Questions** (optional - can be done before or during hosting)
+   - Add, edit, and delete questions
+   - Organize questions by categories
+   - Set question types, answers, and time limits
+   - Export/import questions for backup and sharing
+3. **Start Hosting**
+   - Click "Start Hosting" to open the host display
+   - Create a new room or rejoin an existing session
+   - Select game mode (Classic or Bowl)
+   - Choose question categories
+   - Set number of questions and time limits
+   - Start the game!
+4. **Control Game Flow**
+   - Control game flow (next question, reveal answers, etc.)
+   - Start minigames during breaks (after reveals)
+   - Manage teams (if team mode is enabled)
+   - View live leaderboards
 
-### For Admins
-
-1. Log in to admin panel (create account if using Supabase, or use local admin account)
-2. Manage questions: add, edit, delete
-3. Create and organize questions by categories
-4. Set question types, answers, time limits
-5. Share questions with other admins (feature in development)
-6. Export/import questions for backup and sharing
+**Note**: You only need to log in once. After logging in, you can start hosting immediately without logging in again. The host display will automatically use your authentication.
 
 ## Game Flow
 
@@ -267,9 +278,10 @@ The project is optimized for Raspberry Pi deployment:
 - In-memory game state (rooms lost on server restart)
 - No persistent player accounts or profiles
 - Single server instance (no horizontal scaling)
-- Cloudflare Tunnel URLs expire when server restarts
-- No HTTPS/SSL by default (should be added)
+- Cloudflare Tunnel URLs expire when server restarts (new URL generated each time)
+- No HTTPS/SSL by default (should be added for production)
 - Maximum recommended players: ~30 per session (tested up to 100+)
+- Server URL must be manually entered when connecting to remote servers (saved for convenience)
 
 ## Security Considerations
 
@@ -278,7 +290,7 @@ The project is optimized for Raspberry Pi deployment:
 - Room codes are randomly generated but not cryptographically secure
 - No rate limiting on API endpoints
 - **Privacy-focused**: No student data capture or persistent tracking
-- Admin accounts and questions should be backed up regularly
+- Host accounts and questions should be backed up regularly
 
 
 ## License
@@ -315,7 +327,7 @@ The project is optimized for Raspberry Pi deployment:
 ### High Priority
 
 #### Question Management & Sharing
-- ✅ **Question Sharing System**: Create a platform for admins to share questions and answer sheets
+- ✅ **Question Sharing System**: Create a platform for hosts to share questions and answer sheets
   - No subscription required - free sharing for educators
   - Easy import/export functionality
   - Question templates and bulk operations
@@ -410,7 +422,7 @@ The project is optimized for Raspberry Pi deployment:
 
 ### Documentation Needs
 
-- ✅ **User guides**: Written guides for hosts, admins, and players (included in README)
+- ✅ **User guides**: Written guides for hosts and players (included in README)
 - 📹 **Video tutorials**: Not planned unless really needed
 - 📚 **API documentation**: Will be provided for integrations
 
