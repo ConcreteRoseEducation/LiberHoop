@@ -64,6 +64,23 @@ function clearServerUrlAndRetry() {
     errorEl.style.color = 'var(--success)';
 }
 
+// Validate and clear invalid server URL
+async function validateServerUrl(url) {
+    if (!url) return true;
+    
+    try {
+        const testUrl = url.endsWith('/') ? url.slice(0, -1) : url;
+        const response = await fetch(`${testUrl}/api/ip`, {
+            method: 'GET',
+            signal: AbortSignal.timeout(3000)
+        });
+        return response.ok;
+    } catch (err) {
+        // URL is invalid - connection failed
+        return false;
+    }
+}
+
 // Update server URL input on login screen
 function updateServerUrlDisplay() {
     const loginServerUrlInput = document.getElementById('loginServerUrl');
@@ -136,6 +153,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Load server URL configuration
     loadServerUrl();
     
+    // Validate saved server URL and clear if invalid
+    const savedUrl = localStorage.getItem('liberHoopServerUrl');
+    if (savedUrl) {
+        const isValid = await validateServerUrl(savedUrl);
+        if (!isValid) {
+            console.warn('Saved server URL is invalid, clearing:', savedUrl);
+            clearServerUrl();
+            // Update serverBaseUrl since we cleared it
+            serverBaseUrl = '';
+        }
+    }
+    
     // Update server URL display on login screen
     updateServerUrlDisplay();
     
@@ -184,6 +213,13 @@ async function checkAuthMode() {
         }
     } catch (err) {
         console.error('Failed to check auth mode:', err);
+        
+        // If we have a server URL set and it's failing, clear it if it's invalid
+        if (serverBaseUrl && (err.message && (err.message.includes('Failed to fetch') || err.message.includes('ERR_NAME_NOT_RESOLVED') || err.name === 'AbortError' || err.name === 'TimeoutError'))) {
+            console.warn('Invalid server URL detected, clearing:', serverBaseUrl);
+            clearServerUrl();
+        }
+        
         // Don't show error if it's a file:// protocol issue (already handled)
         if (err.message && err.message.includes('file://')) {
             return; // Error already shown in DOMContentLoaded
@@ -363,7 +399,11 @@ async function login() {
                 }
             } catch (checkErr) {
                 console.error('Server connectivity check failed:', checkErr);
-                errorEl.innerHTML = `Cannot connect to server at ${serverBaseUrl}. <br><button type="button" onclick="clearServerUrlAndRetry()" style="margin-top: 0.5rem; padding: 0.5rem 1rem; background: var(--danger); color: white; border: none; border-radius: 4px; cursor: pointer;">Clear Invalid URL & Retry</button>`;
+                // Automatically clear invalid URL from localStorage
+                if (serverBaseUrl === localStorage.getItem('liberHoopServerUrl')) {
+                    clearServerUrl();
+                }
+                errorEl.innerHTML = `Cannot connect to server at ${serverBaseUrl}. The invalid URL has been cleared. <br>Please enter a valid server URL or leave blank to use the current server.`;
                 showServerError(`Cannot connect to server. Please verify the server URL is correct.`);
                 return;
             }
@@ -394,7 +434,11 @@ async function login() {
                 errorEl.textContent = err.detail || 'Invalid username or password. Please check your credentials.';
             } else if (response.status === 404) {
                 if (serverBaseUrl) {
-                    errorEl.innerHTML = `Server not found at ${serverBaseUrl}. <br><button type="button" onclick="clearServerUrlAndRetry()" style="margin-top: 0.5rem; padding: 0.5rem 1rem; background: var(--danger); color: white; border: none; border-radius: 4px; cursor: pointer;">Clear Invalid URL & Retry</button>`;
+                    // Automatically clear invalid URL
+                    if (serverBaseUrl === localStorage.getItem('liberHoopServerUrl')) {
+                        clearServerUrl();
+                    }
+                    errorEl.innerHTML = `Server not found at ${serverBaseUrl}. The invalid URL has been cleared. <br>Please enter a valid server URL or leave blank to use the current server.`;
                 } else {
                     errorEl.textContent = `Server not found. Please check the URL.`;
                 }
@@ -404,21 +448,32 @@ async function login() {
         }
     } catch (err) {
         console.error('Login error:', err);
+        
+        // Automatically clear invalid URL if connection fails
+        const isConnectionError = err.name === 'AbortError' || err.name === 'TimeoutError' || 
+                                  (err.message && (err.message.includes('Failed to fetch') || err.message.includes('NetworkError') || err.message.includes('CORS') || err.message.includes('ERR_NAME_NOT_RESOLVED')));
+        
+        if (isConnectionError && serverBaseUrl && serverBaseUrl === localStorage.getItem('liberHoopServerUrl')) {
+            clearServerUrl();
+        }
+        
         if (err.name === 'AbortError' || err.name === 'TimeoutError') {
             if (serverBaseUrl) {
-                errorEl.innerHTML = `Connection timeout to ${serverBaseUrl}. <br><button type="button" onclick="clearServerUrlAndRetry()" style="margin-top: 0.5rem; padding: 0.5rem 1rem; background: var(--danger); color: white; border: none; border-radius: 4px; cursor: pointer;">Clear Invalid URL & Retry</button>`;
+                errorEl.innerHTML = `Connection timeout to ${serverBaseUrl}. The invalid URL has been cleared. <br>Please enter a valid server URL or leave blank to use the current server.`;
             } else {
                 errorEl.textContent = 'Connection timeout. Please check your internet connection and try again.';
             }
-        } else if (err.message && (err.message.includes('Failed to fetch') || err.message.includes('NetworkError') || err.message.includes('CORS'))) {
+        } else if (err.message && (err.message.includes('Failed to fetch') || err.message.includes('NetworkError') || err.message.includes('CORS') || err.message.includes('ERR_NAME_NOT_RESOLVED'))) {
             if (serverBaseUrl) {
-                errorEl.innerHTML = `Cannot connect to ${serverBaseUrl}. This may be a CORS issue or the server may be offline. <br><button type="button" onclick="clearServerUrlAndRetry()" style="margin-top: 0.5rem; padding: 0.5rem 1rem; background: var(--danger); color: white; border: none; border-radius: 4px; cursor: pointer;">Clear Invalid URL & Retry</button>`;
+                errorEl.innerHTML = `Cannot connect to ${serverBaseUrl}. The invalid URL has been cleared. <br>Please enter a valid server URL or leave blank to use the current server.`;
             } else {
                 errorEl.textContent = `Cannot connect to server. This may be a CORS issue or the server may be offline.`;
             }
             showServerError(`Cannot connect to server. Check the server URL and ensure CORS is enabled on the server.`);
         } else {
-            if (serverBaseUrl) {
+            if (serverBaseUrl && isConnectionError) {
+                errorEl.innerHTML = `Connection error: ${err.message || 'Unable to connect. Please try again later.'} The invalid URL has been cleared.`;
+            } else if (serverBaseUrl) {
                 errorEl.innerHTML = `Connection error: ${err.message || 'Unable to connect. Please try again later.'} <br><button type="button" onclick="clearServerUrlAndRetry()" style="margin-top: 0.5rem; padding: 0.5rem 1rem; background: var(--danger); color: white; border: none; border-radius: 4px; cursor: pointer;">Clear Invalid URL & Retry</button>`;
             } else {
                 errorEl.textContent = `Connection error: ${err.message || 'Unable to connect. Please try again later.'}`;
