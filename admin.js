@@ -45,11 +45,49 @@ function getApiUrl(path) {
     return `/${cleanPath}`;
 }
 
+// Clear saved server URL
+function clearServerUrl() {
+    localStorage.removeItem('liberHoopServerUrl');
+    serverBaseUrl = '';
+    const loginServerUrlInput = document.getElementById('loginServerUrl');
+    if (loginServerUrlInput) {
+        loginServerUrlInput.value = '';
+    }
+    updateServerUrlDisplay();
+}
+
+// Clear server URL and retry login
+function clearServerUrlAndRetry() {
+    clearServerUrl();
+    const errorEl = document.getElementById('loginError');
+    errorEl.textContent = 'Server URL cleared. Please enter a new server URL or leave blank to use the current server, then try logging in again.';
+    errorEl.style.color = 'var(--success)';
+}
+
+// Update server URL input on login screen
+function updateServerUrlDisplay() {
+    const loginServerUrlInput = document.getElementById('loginServerUrl');
+    if (loginServerUrlInput) {
+        const savedUrl = localStorage.getItem('liberHoopServerUrl');
+        if (savedUrl) {
+            loginServerUrlInput.value = savedUrl;
+        } else {
+            // If on the actual server, show current origin as placeholder value
+            const isGitHubPages = window.location.hostname.includes('github.io') || 
+                                  window.location.hostname.includes('github.com');
+            if (!isGitHubPages) {
+                loginServerUrlInput.placeholder = window.location.origin + ' (current server)';
+            }
+        }
+    }
+}
+
 // Load server URL from localStorage or detect if we're on the same server
 function loadServerUrl() {
     const serverUrlInput = document.getElementById('serverUrl');
     if (!serverUrlInput) {
         // Field might not be visible yet (before login)
+        updateServerUrlDisplay();
         return;
     }
     
@@ -76,6 +114,7 @@ function loadServerUrl() {
             serverUrlInput.value = window.location.origin;
         }
     }
+    updateServerUrlDisplay();
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -96,6 +135,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Load server URL configuration
     loadServerUrl();
+    
+    // Update server URL display on login screen
+    updateServerUrlDisplay();
     
     // Check authentication mode (only if we have a server URL or are NOT on GitHub Pages)
     const isGitHubPages = window.location.hostname.includes('github.io') || 
@@ -276,25 +318,35 @@ function showServerError(message) {
 async function login() {
     const username = document.getElementById('loginUsername').value.trim();
     const password = document.getElementById('loginPassword').value;
+    const loginServerUrlInput = document.getElementById('loginServerUrl');
+    const serverUrlInput = loginServerUrlInput ? loginServerUrlInput.value.trim() : '';
     const errorEl = document.getElementById('loginError');
     
     errorEl.textContent = '';
     
     try {
-        // Use saved server URL if available, otherwise use same origin
-        const savedUrl = localStorage.getItem('liberHoopServerUrl');
+        // Use server URL from input field if provided, otherwise check localStorage, otherwise use same origin
         const isGitHubPages = window.location.hostname.includes('github.io') || 
                               window.location.hostname.includes('github.com');
         
-        if (savedUrl) {
-            serverBaseUrl = savedUrl.endsWith('/') ? savedUrl.slice(0, -1) : savedUrl;
+        if (serverUrlInput) {
+            // User entered a server URL - use it
+            serverBaseUrl = serverUrlInput.endsWith('/') ? serverUrlInput.slice(0, -1) : serverUrlInput;
+            // Save it for next time
+            localStorage.setItem('liberHoopServerUrl', serverBaseUrl);
         } else {
-            // If on GitHub Pages without a server URL, we can't log in
-            if (isGitHubPages) {
-                errorEl.textContent = 'Please access the admin panel from your LiberHoop server URL, or set the server URL after logging in.';
-                return;
+            // No URL entered - check if we have a saved one
+            const savedUrl = localStorage.getItem('liberHoopServerUrl');
+            if (savedUrl) {
+                serverBaseUrl = savedUrl.endsWith('/') ? savedUrl.slice(0, -1) : savedUrl;
+            } else {
+                // If on GitHub Pages without a server URL, we can't log in
+                if (isGitHubPages) {
+                    errorEl.textContent = 'Please enter a server URL to connect to your LiberHoop server.';
+                    return;
+                }
+                serverBaseUrl = ''; // Same origin - try to log in to current server
             }
-            serverBaseUrl = ''; // Same origin - try to log in to current server
         }
         
         // Check service connectivity first (only if we have a server URL set)
@@ -311,7 +363,7 @@ async function login() {
                 }
             } catch (checkErr) {
                 console.error('Server connectivity check failed:', checkErr);
-                errorEl.textContent = `Cannot connect to server at ${serverBaseUrl}. Please check the URL and ensure the server is running.`;
+                errorEl.innerHTML = `Cannot connect to server at ${serverBaseUrl}. <br><button type="button" onclick="clearServerUrlAndRetry()" style="margin-top: 0.5rem; padding: 0.5rem 1rem; background: var(--danger); color: white; border: none; border-radius: 4px; cursor: pointer;">Clear Invalid URL & Retry</button>`;
                 showServerError(`Cannot connect to server. Please verify the server URL is correct.`);
                 return;
             }
@@ -341,7 +393,11 @@ async function login() {
             } else if (response.status === 401) {
                 errorEl.textContent = err.detail || 'Invalid username or password. Please check your credentials.';
             } else if (response.status === 404) {
-                errorEl.textContent = `Server not found at ${serverBaseUrl}. Please check the URL.`;
+                if (serverBaseUrl) {
+                    errorEl.innerHTML = `Server not found at ${serverBaseUrl}. <br><button type="button" onclick="clearServerUrlAndRetry()" style="margin-top: 0.5rem; padding: 0.5rem 1rem; background: var(--danger); color: white; border: none; border-radius: 4px; cursor: pointer;">Clear Invalid URL & Retry</button>`;
+                } else {
+                    errorEl.textContent = `Server not found. Please check the URL.`;
+                }
             } else {
                 errorEl.textContent = err.detail || 'Login failed. Please check your credentials.';
             }
@@ -349,12 +405,24 @@ async function login() {
     } catch (err) {
         console.error('Login error:', err);
         if (err.name === 'AbortError' || err.name === 'TimeoutError') {
-            errorEl.textContent = 'Connection timeout. Please check your internet connection and try again.';
+            if (serverBaseUrl) {
+                errorEl.innerHTML = `Connection timeout to ${serverBaseUrl}. <br><button type="button" onclick="clearServerUrlAndRetry()" style="margin-top: 0.5rem; padding: 0.5rem 1rem; background: var(--danger); color: white; border: none; border-radius: 4px; cursor: pointer;">Clear Invalid URL & Retry</button>`;
+            } else {
+                errorEl.textContent = 'Connection timeout. Please check your internet connection and try again.';
+            }
         } else if (err.message && (err.message.includes('Failed to fetch') || err.message.includes('NetworkError') || err.message.includes('CORS'))) {
-            errorEl.textContent = `Cannot connect to ${serverBaseUrl}. This may be a CORS issue or the server may be offline.`;
+            if (serverBaseUrl) {
+                errorEl.innerHTML = `Cannot connect to ${serverBaseUrl}. This may be a CORS issue or the server may be offline. <br><button type="button" onclick="clearServerUrlAndRetry()" style="margin-top: 0.5rem; padding: 0.5rem 1rem; background: var(--danger); color: white; border: none; border-radius: 4px; cursor: pointer;">Clear Invalid URL & Retry</button>`;
+            } else {
+                errorEl.textContent = `Cannot connect to server. This may be a CORS issue or the server may be offline.`;
+            }
             showServerError(`Cannot connect to server. Check the server URL and ensure CORS is enabled on the server.`);
         } else {
-            errorEl.textContent = `Connection error: ${err.message || 'Unable to connect. Please try again later.'}`;
+            if (serverBaseUrl) {
+                errorEl.innerHTML = `Connection error: ${err.message || 'Unable to connect. Please try again later.'} <br><button type="button" onclick="clearServerUrlAndRetry()" style="margin-top: 0.5rem; padding: 0.5rem 1rem; background: var(--danger); color: white; border: none; border-radius: 4px; cursor: pointer;">Clear Invalid URL & Retry</button>`;
+            } else {
+                errorEl.textContent = `Connection error: ${err.message || 'Unable to connect. Please try again later.'}`;
+            }
         }
     }
 }

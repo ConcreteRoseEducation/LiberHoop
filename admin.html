@@ -20,6 +20,11 @@
             <!-- Login Form -->
             <form id="loginForm">
                 <div class="form-group">
+                    <label for="loginServerUrl">Server URL (optional)</label>
+                    <input type="text" id="loginServerUrl" placeholder="https://your-server.trycloudflare.com" autocomplete="off">
+                    <div class="form-help">Leave blank to use current server, or enter a different server URL</div>
+                </div>
+                <div class="form-group">
                     <label for="loginUsername">Username</label>
                     <input type="text" id="loginUsername" placeholder="admin" required>
                 </div>
