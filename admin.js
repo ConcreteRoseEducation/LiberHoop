@@ -375,6 +375,7 @@ async function login() {
             
             serverBaseUrl = urlToUse;
             // Save it for next time (so it pre-fills, but user can still change it)
+            // Also save it so host.js can use it
             localStorage.setItem('liberHoopServerUrl', serverBaseUrl);
             
             // Check auth mode now that we have a valid server URL
@@ -397,6 +398,8 @@ async function login() {
                 }
                 
                 serverBaseUrl = urlToUse;
+                // Save it so host.js can use it
+                localStorage.setItem('liberHoopServerUrl', serverBaseUrl);
                 
                 // Check auth mode now that we have a valid server URL
                 await checkAuthMode();
@@ -408,6 +411,8 @@ async function login() {
                 }
                 serverBaseUrl = ''; // Same origin - try to log in to current server
                 console.log('No server URL provided, using same origin');
+                // Clear server URL from localStorage since we're using same origin
+                localStorage.removeItem('liberHoopServerUrl');
                 
                 // Check auth mode for same origin
                 await checkAuthMode();

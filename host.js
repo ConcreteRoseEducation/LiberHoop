@@ -34,6 +34,22 @@ const state = {
     minigameTimerInterval: null
 };
 
+// Helper function to get API URL (similar to admin.js)
+function getApiUrl(path) {
+    // Get server URL from localStorage (set by admin.js when user logs in)
+    const serverBaseUrl = localStorage.getItem('liberHoopServerUrl') || '';
+    
+    // Remove leading slash if present to avoid double slashes
+    const cleanPath = path.startsWith('/') ? path.slice(1) : path;
+    
+    // If we have a server URL, use it; otherwise use relative path (same origin)
+    if (serverBaseUrl) {
+        const base = serverBaseUrl.endsWith('/') ? serverBaseUrl.slice(0, -1) : serverBaseUrl;
+        return `${base}/${cleanPath}`;
+    }
+    return `/${cleanPath}`;
+}
+
 // ─────────────────────────── Initialization ─────────────────────────── #
 
 async function init() {
@@ -48,7 +64,7 @@ async function init() {
         }
         
         // Verify token is still valid
-        const authCheck = await fetch('/api/admin/me', {
+        const authCheck = await fetch(getApiUrl('/api/admin/me'), {
             headers: { 'X-Admin-Token': state.adminToken }
         });
         
@@ -62,7 +78,7 @@ async function init() {
         console.log('Authenticated as:', state.adminName);
         
         // Check if admin already has an active session on the server
-        const sessionResponse = await fetch('/api/admin/session', {
+        const sessionResponse = await fetch(getApiUrl('/api/admin/session'), {
             headers: { 'X-Admin-Token': state.adminToken }
         });
         
@@ -99,7 +115,7 @@ async function init() {
         
         // Create new room if not reconnecting
         if (!state.roomCode) {
-            const response = await fetch('/api/room/create', { 
+            const response = await fetch(getApiUrl('/api/room/create'), { 
                 method: 'POST',
                 headers: { 'X-Admin-Token': state.adminToken }
             });
@@ -158,7 +174,7 @@ async function init() {
 
 async function checkRoomExists(roomCode) {
     try {
-        const response = await fetch(`/api/room/${roomCode}/exists`);
+        const response = await fetch(getApiUrl(`/api/room/${roomCode}/exists`));
         const data = await response.json();
         return data.exists ? data : null;
     } catch {
@@ -205,7 +221,7 @@ function showAuthRequired() {
 }
 
 async function loadCategories() {
-    const response = await fetch('/api/categories');
+    const response = await fetch(getApiUrl('/api/categories'));
     const data = await response.json();
     state.categories = data.categories;
     
@@ -311,8 +327,21 @@ function setupEventListeners() {
 // ─────────────────────────── WebSocket ─────────────────────────── #
 
 function connectWebSocket() {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/host/${state.roomCode}?token=${encodeURIComponent(state.adminToken)}`;
+    // Get server URL from localStorage (set by admin.js when user logs in)
+    const serverBaseUrl = localStorage.getItem('liberHoopServerUrl') || '';
+    
+    // Determine WebSocket protocol and host
+    let wsUrl;
+    if (serverBaseUrl) {
+        // Use the server URL from localStorage
+        const wsProtocol = serverBaseUrl.startsWith('https://') ? 'wss:' : 'ws:';
+        const wsHost = serverBaseUrl.replace(/^https?:\/\//, '');
+        wsUrl = `${wsProtocol}//${wsHost}/ws/host/${state.roomCode}?token=${encodeURIComponent(state.adminToken)}`;
+    } else {
+        // Use same origin
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        wsUrl = `${protocol}//${window.location.host}/ws/host/${state.roomCode}?token=${encodeURIComponent(state.adminToken)}`;
+    }
     
     console.log('Connecting to WebSocket:', wsUrl);
     
@@ -1161,7 +1190,7 @@ async function toggleTeamMode() {
     const newMode = !state.teamMode;
     
     try {
-        const response = await fetch(`/api/room/${state.roomCode}/team-mode`, {
+        const response = await fetch(getApiUrl(`/api/room/${state.roomCode}/team-mode`), {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -1190,7 +1219,7 @@ async function autoAssignTeams() {
     }
     
     try {
-        const response = await fetch(`/api/room/${state.roomCode}/teams/auto-assign`, {
+        const response = await fetch(getApiUrl(`/api/room/${state.roomCode}/teams/auto-assign`), {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -1212,7 +1241,7 @@ async function addTeam() {
     const teamName = prompt('Team name (optional):');
     
     try {
-        const response = await fetch(`/api/room/${state.roomCode}/teams`, {
+        const response = await fetch(getApiUrl(`/api/room/${state.roomCode}/teams`), {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -1234,7 +1263,7 @@ async function deleteTeam(teamId) {
     if (!confirm('Delete this team? Players will be unassigned.')) return;
     
     try {
-        const response = await fetch(`/api/room/${state.roomCode}/teams/${teamId}`, {
+        const response = await fetch(getApiUrl(`/api/room/${state.roomCode}/teams/${teamId}`), {
             method: 'DELETE',
             headers: {
                 'X-Admin-Token': state.adminToken
@@ -1252,7 +1281,7 @@ async function deleteTeam(teamId) {
 
 async function assignPlayerToTeam(playerId, teamId) {
     try {
-        const response = await fetch(`/api/room/${state.roomCode}/teams/assign`, {
+        const response = await fetch(getApiUrl(`/api/room/${state.roomCode}/teams/assign`), {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
