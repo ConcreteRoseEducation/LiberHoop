@@ -276,15 +276,7 @@ function setupEventListeners() {
         revealStartMinigameBtn.addEventListener('click', startMinigameFromReveal);
     }
     
-    const revealMinigameType = document.getElementById('revealMinigameType');
-    if (revealMinigameType) {
-        revealMinigameType.addEventListener('change', (e) => {
-            const promptInput = document.getElementById('revealMinigamePrompt');
-            if (promptInput) {
-                promptInput.style.display = e.target.value === 'draw_prompt' ? 'block' : 'none';
-            }
-        });
-    }
+    // Minigames are now client-side only (removed drawing minigames)
     
     // Skip to answer / show results
     document.getElementById('skipBtn').addEventListener('click', () => {
@@ -1680,28 +1672,15 @@ function renderTeamPodium(teamLeaderboard) {
 // ─────────────────────────── Minigame Functions ─────────────────────────── #
 
 function startMinigameFromReveal() {
-    const minigameType = document.getElementById('revealMinigameType').value;
-    const prompt = document.getElementById('revealMinigamePrompt').value;
-    const duration = parseInt(document.getElementById('revealMinigameDuration').value) || 60;
-    
-    // For microgames, don't send to server (client-side only)
-    if (minigameType === 'microgame') {
-        // Microgames are client-side only, but we could broadcast a message
-        // For now, just show a message that microgames are player-only
-        alert('Microgames are available for players in the lobby. Use drawing games for synchronized minigames.');
-        return;
-    }
-    
-    sendToHost({
-        type: 'start_minigame',
-        minigame_type: minigameType,
-        prompt: minigameType === 'draw_prompt' ? prompt : null,
-        duration: duration
-    });
+    // Minigames are now client-side only (available to players in lobby)
+    // Host can no longer start synchronized minigames
+    // This function is kept for potential future use
 }
 
 function showMinigameHost(data) {
-    const minigameType = data.minigame_type || 'draw_freestyle';
+    // Minigames are now client-side only
+    // This function is kept for potential future synchronized minigames
+    const minigameType = data.minigame_type || 'microgame';
     const prompt = data.prompt || '';
     
     // Store current screen to return to
@@ -1710,8 +1689,8 @@ function showMinigameHost(data) {
         state.previousScreen = currentScreen.id;
     }
     
-    document.getElementById('minigameTitleHost').textContent = minigameType === 'draw_prompt' ? '🎨 DRAW IT!' : '🎨 FREE DRAW';
-    document.getElementById('minigamePromptHost').textContent = prompt || 'Players are drawing...';
+    document.getElementById('minigameTitleHost').textContent = '🎮 MINIGAME';
+    document.getElementById('minigamePromptHost').textContent = 'Players are playing minigames...';
     
     // Clear submissions
     const submissionsEl = document.getElementById('minigameSubmissions');

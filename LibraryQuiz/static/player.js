@@ -25,17 +25,12 @@ const state = {
     wonBuzz: false,
     // Minigame state
     minigameState: null,
-    drawingCanvas: null,
-    drawingCtx: null,
-    isDrawing: false,
-    lastX: 0,
-    lastY: 0,
-    currentColor: '#000000',
-    brushSize: 5,
     currentMicrogame: null,
     microgameScore: 0,
     microgameRound: 0,
-    minigameTimerInterval: null
+    minigameTimerInterval: null,
+    currentPuzzle: null,
+    puzzleScore: 0
 };
 
 // ─────────────────────────── Screens ─────────────────────────── #
@@ -1006,29 +1001,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.minigame-option-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const minigameType = btn.dataset.type;
-            if (minigameType === 'draw_prompt') {
-                // Show prompt input
-                const promptInput = document.getElementById('lobbyPromptInput');
-                if (promptInput) {
-                    promptInput.classList.remove('hidden');
-                    const input = document.getElementById('lobbyMinigamePrompt');
-                    if (input) input.focus();
-                }
-                // Start minigame when prompt is entered
-                const promptField = document.getElementById('lobbyMinigamePrompt');
-                if (promptField) {
-                    const startHandler = (e) => {
-                        if (e.key === 'Enter' && promptField.value.trim()) {
-                            startLocalMinigame('draw_prompt', promptField.value.trim());
-                            promptInput.classList.add('hidden');
-                            promptField.removeEventListener('keypress', startHandler);
-                        }
-                    };
-                    promptField.addEventListener('keypress', startHandler);
-                }
-            } else {
-                startLocalMinigame(minigameType);
-            }
+            startLocalMinigame(minigameType);
         });
     });
 });
@@ -1048,8 +1021,7 @@ function startLocalMinigame(minigameType, prompt = null) {
 function showMinigame(data) {
     state.minigameState = data;
     
-    const minigameType = data.minigame_type || 'draw_freestyle';
-    const prompt = data.prompt || '';
+    const minigameType = data.minigame_type || 'microgame';
     
     // Update UI based on minigame type
     if (minigameType === 'microgame') {
@@ -1057,42 +1029,26 @@ function showMinigame(data) {
         return;
     }
     
-    // Drawing games
-    document.getElementById('minigameTitle').textContent = minigameType === 'draw_prompt' ? '🎨 DRAW IT!' : '🎨 FREE DRAW';
-    document.getElementById('minigamePrompt').textContent = prompt || 'Draw anything you want!';
-    
-    // Show drawing container, hide microgame UI
-    const drawingContainer = document.getElementById('drawingContainer');
-    const drawingControls = document.getElementById('drawingControls');
-    const microgameUI = document.getElementById('microgameUI');
-    
-    if (drawingContainer) drawingContainer.style.display = 'block';
-    if (drawingControls) drawingControls.style.display = 'flex';
-    if (microgameUI) microgameUI.style.display = 'none';
-    
-    // Initialize canvas
-    initDrawingCanvas();
-    
-    // Start timer if duration is set
-    if (data.duration && data.duration > 0) {
-        startMinigameTimer(data.duration);
+    // Puzzle games
+    if (['word_search', 'pattern_match', 'sequence_puzzle'].includes(minigameType)) {
+        showPuzzleGame(data);
+        return;
     }
     
-    showScreen('minigameScreen');
+    // Fallback to microgame
+    showMicrogame(data);
 }
 
 function showMicrogame(data) {
-    // Hide drawing UI, show microgame UI
-    const drawingContainer = document.getElementById('drawingContainer');
-    const drawingControls = document.getElementById('drawingControls');
+    // Show microgame UI, hide puzzle UI
     const microgameUI = document.getElementById('microgameUI');
+    const puzzleUI = document.getElementById('puzzleGameUI');
     
-    if (drawingContainer) drawingContainer.style.display = 'none';
-    if (drawingControls) drawingControls.style.display = 'none';
     if (microgameUI) {
         microgameUI.style.display = 'block';
         microgameUI.classList.remove('hidden');
     }
+    if (puzzleUI) puzzleUI.style.display = 'none';
     
     const titleEl = document.getElementById('minigameTitle');
     const promptEl = document.getElementById('minigamePrompt');
@@ -1130,23 +1086,29 @@ function runMicrogame(gameType) {
     state.microgameRound++;
     
     if (gameType === 'tap_when_red') {
-        // Tap when the screen turns red
+        // Tap when the screen turns red - Enhanced with graphics
         microgameUI.innerHTML = `
-            <div class="microgame-instruction">Tap when the screen turns RED!</div>
-            <div class="microgame-display" id="microgameDisplay" style="background: #3498db; width: 100%; height: 300px; border-radius: 12px; margin: 1rem 0;"></div>
-            <div class="microgame-score">Score: <span id="microgameScore">0</span></div>
+            <div class="microgame-instruction">⚡ Tap when the screen turns RED!</div>
+            <div class="microgame-display" id="microgameDisplay" style="background: linear-gradient(135deg, #3498db 0%, #2980b9 100%); width: 100%; height: 300px; border-radius: 12px; margin: 1rem 0; display: flex; align-items: center; justify-content: center; font-size: 4rem; color: white; box-shadow: 0 8px 32px rgba(52, 152, 219, 0.4); transition: all 0.3s ease;">
+                <div style="text-align: center;">
+                    <div style="font-size: 5rem; margin-bottom: 1rem;">🔵</div>
+                    <div style="font-size: 1.5rem; font-weight: bold;">WAIT FOR RED...</div>
+                </div>
+            </div>
+            <div class="microgame-score">Score: <span id="microgameScore">${state.microgameScore}</span></div>
         `;
         
         const display = document.getElementById('microgameDisplay');
         let clicked = false;
         
         const clickHandler = () => {
-            if (!clicked && display.style.background === 'rgb(231, 76, 60)') {
+            if (!clicked && display.style.background.includes('rgb(231, 76, 60)')) {
                 clicked = true;
                 state.microgameScore++;
                 document.getElementById('microgameScore').textContent = state.microgameScore;
-                display.textContent = '✓ CORRECT!';
-                display.style.background = '#2ecc71';
+                display.innerHTML = '<div style="text-align: center;"><div style="font-size: 5rem; margin-bottom: 1rem;">✅</div><div style="font-size: 2rem; font-weight: bold;">CORRECT!</div></div>';
+                display.style.background = 'linear-gradient(135deg, #2ecc71 0%, #27ae60 100%)';
+                display.style.boxShadow = '0 8px 32px rgba(46, 204, 113, 0.4)';
                 setTimeout(() => {
                     if (state.microgameRound < 5) {
                         runMicrogame(gameType);
@@ -1156,8 +1118,9 @@ function runMicrogame(gameType) {
                 }, 1000);
             } else if (!clicked) {
                 // Too early
-                display.textContent = '✗ TOO EARLY!';
-                display.style.background = '#e74c3c';
+                display.innerHTML = '<div style="text-align: center;"><div style="font-size: 5rem; margin-bottom: 1rem;">❌</div><div style="font-size: 2rem; font-weight: bold;">TOO EARLY!</div></div>';
+                display.style.background = 'linear-gradient(135deg, #e74c3c 0%, #c0392b 100%)';
+                display.style.boxShadow = '0 8px 32px rgba(231, 76, 60, 0.4)';
                 setTimeout(() => {
                     if (state.microgameRound < 5) {
                         runMicrogame(gameType);
@@ -1175,7 +1138,10 @@ function runMicrogame(gameType) {
         const delay = 1000 + Math.random() * 2000;
         setTimeout(() => {
             if (!clicked) {
-                display.style.background = '#e74c3c'; // Red
+                display.innerHTML = '<div style="text-align: center;"><div style="font-size: 5rem; margin-bottom: 1rem;">🔴</div><div style="font-size: 2rem; font-weight: bold;">TAP NOW!</div></div>';
+                display.style.background = 'linear-gradient(135deg, #e74c3c 0%, #c0392b 100%)';
+                display.style.boxShadow = '0 8px 32px rgba(231, 76, 60, 0.6)';
+                display.style.transform = 'scale(1.05)';
             }
         }, delay);
         
@@ -1189,20 +1155,24 @@ function runMicrogame(gameType) {
         }, delay + 2000);
         
     } else if (gameType === 'quick_math') {
-        // Quick math problems
+        // Quick math problems - Enhanced with graphics
         const a = Math.floor(Math.random() * 20) + 1;
         const b = Math.floor(Math.random() * 20) + 1;
         const answer = a + b;
+        const wrong1 = answer + Math.floor(Math.random() * 10) + 1;
+        const wrong2 = Math.max(1, answer - Math.floor(Math.random() * 10) - 1);
         
         microgameUI.innerHTML = `
-            <div class="microgame-instruction">Solve quickly!</div>
-            <div class="microgame-question">${a} + ${b} = ?</div>
-            <div class="microgame-options">
-                <button class="microgame-option" data-answer="${answer}">${answer}</button>
-                <button class="microgame-option" data-answer="${answer + Math.floor(Math.random() * 10) + 1}">${answer + Math.floor(Math.random() * 10) + 1}</button>
-                <button class="microgame-option" data-answer="${Math.max(1, answer - Math.floor(Math.random() * 10) - 1)}">${Math.max(1, answer - Math.floor(Math.random() * 10) - 1)}</button>
+            <div class="microgame-instruction">🧮 Solve quickly!</div>
+            <div class="microgame-question" style="font-size: 3rem; font-weight: bold; margin: 2rem 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">
+                ${a} + ${b} = ?
             </div>
-            <div class="microgame-score">Score: <span id="microgameScore">${state.microgameScore}</span></div>
+            <div class="microgame-options" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin: 2rem 0;">
+                <button class="microgame-option" data-answer="${answer}" style="padding: 1.5rem; font-size: 2rem; border-radius: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);">${answer}</button>
+                <button class="microgame-option" data-answer="${wrong1}" style="padding: 1.5rem; font-size: 2rem; border-radius: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);">${wrong1}</button>
+                <button class="microgame-option" data-answer="${wrong2}" style="padding: 1.5rem; font-size: 2rem; border-radius: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);">${wrong2}</button>
+            </div>
+            <div class="microgame-score" style="font-size: 1.5rem; font-weight: bold;">Score: <span id="microgameScore">${state.microgameScore}</span></div>
         `;
         
         // Shuffle options
@@ -1215,12 +1185,24 @@ function runMicrogame(gameType) {
         
         options.forEach(btn => {
             btn.addEventListener('click', () => {
-                if (parseInt(btn.dataset.answer) === answer) {
+                const isCorrect = parseInt(btn.dataset.answer) === answer;
+                if (isCorrect) {
                     state.microgameScore++;
                     document.getElementById('microgameScore').textContent = state.microgameScore;
-                    btn.style.background = '#2ecc71';
+                    btn.style.background = 'linear-gradient(135deg, #2ecc71 0%, #27ae60 100%)';
+                    btn.style.transform = 'scale(1.1)';
+                    btn.style.boxShadow = '0 8px 25px rgba(46, 204, 113, 0.6)';
                 } else {
-                    btn.style.background = '#e74c3c';
+                    btn.style.background = 'linear-gradient(135deg, #e74c3c 0%, #c0392b 100%)';
+                    btn.style.transform = 'scale(0.95)';
+                    btn.style.boxShadow = '0 4px 15px rgba(231, 76, 60, 0.4)';
+                    // Highlight correct answer
+                    options.forEach(opt => {
+                        if (parseInt(opt.dataset.answer) === answer) {
+                            opt.style.background = 'linear-gradient(135deg, #2ecc71 0%, #27ae60 100%)';
+                            opt.style.boxShadow = '0 8px 25px rgba(46, 204, 113, 0.6)';
+                        }
+                    });
                 }
                 setTimeout(() => {
                     if (state.microgameRound < 5) {
@@ -1228,34 +1210,38 @@ function runMicrogame(gameType) {
                     } else {
                         endLocalMinigame();
                     }
-                }, 1000);
+                }, 1500);
             });
         });
         
     } else if (gameType === 'count_clicks') {
-        // Count the number of clicks shown
+        // Count the number of clicks shown - Enhanced with graphics
         const target = Math.floor(Math.random() * 5) + 3;
         
         microgameUI.innerHTML = `
-            <div class="microgame-instruction">Count the clicks!</div>
-            <div class="microgame-display" id="microgameDisplay" style="width: 100%; height: 200px; border-radius: 12px; margin: 1rem 0; background: var(--bg-card); display: flex; align-items: center; justify-content: center; font-size: 3rem;">🔊</div>
-            <div class="microgame-input">
-                <input type="number" id="clickCountInput" placeholder="How many?" min="1" max="10">
-                <button id="submitCountBtn">Submit</button>
+            <div class="microgame-instruction">🔊 Count the clicks!</div>
+            <div class="microgame-display" id="microgameDisplay" style="width: 100%; height: 250px; border-radius: 12px; margin: 1rem 0; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); display: flex; align-items: center; justify-content: center; font-size: 5rem; box-shadow: 0 8px 32px rgba(245, 87, 108, 0.4); transition: all 0.2s ease;"></div>
+            <div class="microgame-input" style="display: flex; gap: 1rem; margin: 2rem 0; align-items: center; justify-content: center;">
+                <input type="number" id="clickCountInput" placeholder="How many?" min="1" max="10" style="padding: 1rem; font-size: 1.5rem; border-radius: 8px; border: 2px solid var(--accent); width: 150px; text-align: center;">
+                <button id="submitCountBtn" style="padding: 1rem 2rem; font-size: 1.2rem; border-radius: 8px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; cursor: pointer; font-weight: bold; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);">Submit</button>
             </div>
-            <div class="microgame-score">Score: <span id="microgameScore">${state.microgameScore}</span></div>
+            <div class="microgame-score" style="font-size: 1.5rem; font-weight: bold;">Score: <span id="microgameScore">${state.microgameScore}</span></div>
         `;
         
         const display = document.getElementById('microgameDisplay');
         let clickCount = 0;
         
-        // Play clicks
+        // Play clicks with visual feedback
         const playClicks = () => {
             for (let i = 0; i < target; i++) {
                 setTimeout(() => {
-                    display.textContent = '🔊';
+                    display.innerHTML = '<div style="font-size: 6rem; animation: pulse 0.3s ease;">🔊</div>';
+                    display.style.transform = 'scale(1.2)';
+                    display.style.boxShadow = '0 12px 40px rgba(245, 87, 108, 0.6)';
                     setTimeout(() => {
-                        display.textContent = '';
+                        display.innerHTML = '';
+                        display.style.transform = 'scale(1)';
+                        display.style.boxShadow = '0 8px 32px rgba(245, 87, 108, 0.4)';
                     }, 200);
                 }, i * 500);
             }
@@ -1265,14 +1251,17 @@ function runMicrogame(gameType) {
         
         document.getElementById('submitCountBtn').addEventListener('click', () => {
             const guess = parseInt(document.getElementById('clickCountInput').value);
-            if (guess === target) {
+            const isCorrect = guess === target;
+            if (isCorrect) {
                 state.microgameScore++;
                 document.getElementById('microgameScore').textContent = state.microgameScore;
-                display.textContent = '✓ CORRECT!';
-                display.style.background = '#2ecc71';
+                display.innerHTML = '<div style="text-align: center;"><div style="font-size: 5rem; margin-bottom: 1rem;">✅</div><div style="font-size: 2rem; font-weight: bold;">CORRECT!</div></div>';
+                display.style.background = 'linear-gradient(135deg, #2ecc71 0%, #27ae60 100%)';
+                display.style.boxShadow = '0 8px 32px rgba(46, 204, 113, 0.4)';
             } else {
-                display.textContent = `✗ It was ${target}`;
-                display.style.background = '#e74c3c';
+                display.innerHTML = `<div style="text-align: center;"><div style="font-size: 5rem; margin-bottom: 1rem;">❌</div><div style="font-size: 1.5rem; font-weight: bold;">It was ${target}</div></div>`;
+                display.style.background = 'linear-gradient(135deg, #e74c3c 0%, #c0392b 100%)';
+                display.style.boxShadow = '0 8px 32px rgba(231, 76, 60, 0.4)';
             }
             setTimeout(() => {
                 if (state.microgameRound < 5) {
@@ -1313,182 +1302,213 @@ function hideMinigame() {
     }
 }
 
-function startMinigameTimer(duration) {
-    const timerEl = document.getElementById('minigameTimer');
-    if (!timerEl) return;
+// ─────────────────────────── Puzzle Game Functions ─────────────────────────── #
+
+function showPuzzleGame(data) {
+    const minigameType = data.minigame_type;
+    const puzzleUI = document.getElementById('puzzleGameUI');
+    const microgameUI = document.getElementById('microgameUI');
     
-    let timeLeft = duration;
-    timerEl.textContent = `Time: ${timeLeft}s`;
+    if (puzzleUI) {
+        puzzleUI.style.display = 'block';
+    }
+    if (microgameUI) microgameUI.style.display = 'none';
     
-    if (state.minigameTimerInterval) {
-        clearInterval(state.minigameTimerInterval);
+    const titleEl = document.getElementById('minigameTitle');
+    if (titleEl) {
+        const titles = {
+            'word_search': '🔍 WORD SEARCH',
+            'pattern_match': '🧩 PATTERN MATCH',
+            'sequence_puzzle': '🔢 SEQUENCE PUZZLE'
+        };
+        titleEl.textContent = titles[minigameType] || '🧩 PUZZLE';
     }
     
-    state.minigameTimerInterval = setInterval(() => {
-        timeLeft--;
-        if (timerEl) {
-            timerEl.textContent = `Time: ${timeLeft}s`;
+    state.currentPuzzle = minigameType;
+    state.puzzleScore = 0;
+    
+    if (minigameType === 'word_search') {
+        startWordSearch();
+    } else if (minigameType === 'pattern_match') {
+        startPatternMatch();
+    } else if (minigameType === 'sequence_puzzle') {
+        startSequencePuzzle();
+    }
+    
+    showScreen('minigameScreen');
+}
+
+function startWordSearch() {
+    const words = ['QUIZ', 'BOOK', 'GAME', 'FUN', 'PLAY'];
+    const gridSize = 8;
+    const puzzleUI = document.getElementById('puzzleGameUI');
+    
+    // Create a simple word search grid
+    const grid = Array(gridSize).fill(null).map(() => Array(gridSize).fill(''));
+    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    
+    // Fill grid with random letters
+    for (let i = 0; i < gridSize; i++) {
+        for (let j = 0; j < gridSize; j++) {
+            grid[i][j] = letters[Math.floor(Math.random() * letters.length)];
         }
-        if (timeLeft <= 0) {
-            clearInterval(state.minigameTimerInterval);
-            state.minigameTimerInterval = null;
-            submitMinigameAnswer();
+    }
+    
+    // Place a word horizontally (simplified)
+    const word = words[Math.floor(Math.random() * words.length)];
+    const row = Math.floor(Math.random() * (gridSize - word.length));
+    const col = Math.floor(Math.random() * (gridSize - word.length));
+    for (let i = 0; i < word.length; i++) {
+        grid[row][col + i] = word[i];
+    }
+    
+    let gridHTML = '<div style="display: grid; grid-template-columns: repeat(' + gridSize + ', 1fr); gap: 4px; max-width: 400px; margin: 2rem auto;">';
+    for (let i = 0; i < gridSize; i++) {
+        for (let j = 0; j < gridSize; j++) {
+            gridHTML += `<div style="aspect-ratio: 1; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: bold; border-radius: 8px; cursor: pointer; transition: all 0.2s;" data-row="${i}" data-col="${j}">${grid[i][j]}</div>`;
         }
-    }, 1000);
+    }
+    gridHTML += '</div>';
+    
+    puzzleUI.innerHTML = `
+        <div style="text-align: center; padding: 2rem;">
+            <div class="microgame-instruction">Find the word: <strong style="font-size: 2rem; color: var(--accent);">${word}</strong></div>
+            ${gridHTML}
+            <div style="margin-top: 2rem;">
+                <input type="text" id="wordInput" placeholder="Type the word you found..." style="padding: 1rem; font-size: 1.2rem; border-radius: 8px; border: 2px solid var(--accent); width: 250px; text-align: center;">
+                <button id="submitWordBtn" style="padding: 1rem 2rem; font-size: 1.2rem; margin-left: 1rem; border-radius: 8px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; cursor: pointer; font-weight: bold;">Submit</button>
+            </div>
+            <div class="microgame-score" style="margin-top: 1rem; font-size: 1.5rem; font-weight: bold;">Score: <span id="puzzleScore">${state.puzzleScore}</span></div>
+        </div>
+    `;
+    
+    document.getElementById('submitWordBtn').addEventListener('click', () => {
+        const guess = document.getElementById('wordInput').value.toUpperCase().trim();
+        if (guess === word) {
+            state.puzzleScore++;
+            document.getElementById('puzzleScore').textContent = state.puzzleScore;
+            puzzleUI.innerHTML = `
+                <div style="text-align: center; padding: 2rem;">
+                    <div style="font-size: 5rem; margin-bottom: 1rem;">✅</div>
+                    <div style="font-size: 2rem; font-weight: bold; margin-bottom: 2rem;">Correct! Found: ${word}</div>
+                    <button onclick="startWordSearch()" style="padding: 1rem 2rem; font-size: 1.2rem; border-radius: 8px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; cursor: pointer; font-weight: bold;">Next Puzzle</button>
+                </div>
+            `;
+        } else {
+            puzzleUI.innerHTML = `
+                <div style="text-align: center; padding: 2rem;">
+                    <div style="font-size: 5rem; margin-bottom: 1rem;">❌</div>
+                    <div style="font-size: 1.5rem; margin-bottom: 2rem;">The word was: <strong>${word}</strong></div>
+                    <button onclick="startWordSearch()" style="padding: 1rem 2rem; font-size: 1.2rem; border-radius: 8px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; cursor: pointer; font-weight: bold;">Try Again</button>
+                </div>
+            `;
+        }
+    });
 }
 
-function initDrawingCanvas() {
-    const canvas = document.getElementById('drawingCanvas');
-    if (!canvas) return;
+function startPatternMatch() {
+    const patterns = [
+        { pattern: ['🔴', '🔵', '🔴', '🔵'], answer: '🔴' },
+        { pattern: ['⭐', '⭐', '⭐', '⭐'], answer: '⭐' },
+        { pattern: ['🟢', '🟡', '🟢', '🟡'], answer: '🟢' },
+        { pattern: ['🔷', '🔶', '🔷', '🔶'], answer: '🔷' }
+    ];
     
-    const container = document.getElementById('drawingContainer');
-    if (container) {
-        const rect = container.getBoundingClientRect();
-        canvas.width = rect.width - 20;
-        canvas.height = Math.min(rect.width - 20, window.innerHeight * 0.5);
+    const puzzle = patterns[Math.floor(Math.random() * patterns.length)];
+    const nextItem = puzzle.answer;
+    
+    const puzzleUI = document.getElementById('puzzleGameUI');
+    puzzleUI.innerHTML = `
+        <div style="text-align: center; padding: 2rem;">
+            <div class="microgame-instruction">What comes next in the pattern?</div>
+            <div style="display: flex; justify-content: center; gap: 1rem; margin: 2rem 0; font-size: 4rem;">
+                ${puzzle.pattern.map((item, i) => `<div style="padding: 1rem; background: var(--bg-card); border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">${item}</div>`).join('')}
+                <div style="padding: 1rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4); color: white; font-size: 2rem; display: flex; align-items: center; justify-content: center; min-width: 80px;">?</div>
+            </div>
+            <div style="display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap; margin: 2rem 0;">
+                ${['🔴', '🔵', '🟢', '🟡', '⭐', '🔷', '🔶'].map(emoji => 
+                    `<button onclick="checkPatternAnswer('${emoji}', '${nextItem}')" style="padding: 1.5rem; font-size: 3rem; border-radius: 12px; background: var(--bg-card); border: 3px solid var(--accent); cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">${emoji}</button>`
+                ).join('')}
+            </div>
+            <div class="microgame-score" style="margin-top: 1rem; font-size: 1.5rem; font-weight: bold;">Score: <span id="puzzleScore">${state.puzzleScore}</span></div>
+        </div>
+    `;
+}
+
+function checkPatternAnswer(selected, correct) {
+    const puzzleUI = document.getElementById('puzzleGameUI');
+    if (selected === correct) {
+        state.puzzleScore++;
+        document.getElementById('puzzleScore').textContent = state.puzzleScore;
+        puzzleUI.innerHTML = `
+            <div style="text-align: center; padding: 2rem;">
+                <div style="font-size: 5rem; margin-bottom: 1rem;">✅</div>
+                <div style="font-size: 2rem; font-weight: bold; margin-bottom: 2rem;">Correct!</div>
+                <button onclick="startPatternMatch()" style="padding: 1rem 2rem; font-size: 1.2rem; border-radius: 8px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; cursor: pointer; font-weight: bold;">Next Puzzle</button>
+            </div>
+        `;
     } else {
-        canvas.width = window.innerWidth - 40;
-        canvas.height = window.innerHeight * 0.5;
+        puzzleUI.innerHTML = `
+            <div style="text-align: center; padding: 2rem;">
+                <div style="font-size: 5rem; margin-bottom: 1rem;">❌</div>
+                <div style="font-size: 1.5rem; margin-bottom: 2rem;">The correct answer was: <span style="font-size: 3rem;">${correct}</span></div>
+                <button onclick="startPatternMatch()" style="padding: 1rem 2rem; font-size: 1.2rem; border-radius: 8px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; cursor: pointer; font-weight: bold;">Try Again</button>
+            </div>
+        `;
     }
+}
+
+function startSequencePuzzle() {
+    const sequences = [
+        { seq: [2, 4, 6, 8], answer: 10 },
+        { seq: [1, 3, 5, 7], answer: 9 },
+        { seq: [5, 10, 15, 20], answer: 25 },
+        { seq: [3, 6, 9, 12], answer: 15 },
+        { seq: [1, 4, 9, 16], answer: 25 } // squares
+    ];
     
-    state.drawingCanvas = canvas;
-    state.drawingCtx = canvas.getContext('2d');
+    const puzzle = sequences[Math.floor(Math.random() * sequences.length)];
+    const puzzleUI = document.getElementById('puzzleGameUI');
     
-    // Set default drawing style
-    state.drawingCtx.strokeStyle = state.currentColor;
-    state.drawingCtx.lineWidth = state.brushSize;
-    state.drawingCtx.lineCap = 'round';
-    state.drawingCtx.lineJoin = 'round';
+    puzzleUI.innerHTML = `
+        <div style="text-align: center; padding: 2rem;">
+            <div class="microgame-instruction">What number comes next?</div>
+            <div style="display: flex; justify-content: center; gap: 1rem; margin: 2rem 0; flex-wrap: wrap;">
+                ${puzzle.seq.map((num, i) => 
+                    `<div style="padding: 1.5rem 2rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 12px; font-size: 2rem; font-weight: bold; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);">${num}</div>`
+                ).join('')}
+                <div style="padding: 1.5rem 2rem; background: var(--bg-card); border: 3px solid var(--accent); border-radius: 12px; font-size: 2rem; font-weight: bold; min-width: 80px; display: flex; align-items: center; justify-content: center;">?</div>
+            </div>
+            <div style="margin-top: 2rem;">
+                <input type="number" id="sequenceInput" placeholder="Enter number..." style="padding: 1rem; font-size: 1.5rem; border-radius: 8px; border: 2px solid var(--accent); width: 200px; text-align: center;">
+                <button id="submitSequenceBtn" style="padding: 1rem 2rem; font-size: 1.2rem; margin-left: 1rem; border-radius: 8px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; cursor: pointer; font-weight: bold;">Submit</button>
+            </div>
+            <div class="microgame-score" style="margin-top: 1rem; font-size: 1.5rem; font-weight: bold;">Score: <span id="puzzleScore">${state.puzzleScore}</span></div>
+        </div>
+    `;
     
-    // Clear canvas
-    state.drawingCtx.fillStyle = '#ffffff';
-    state.drawingCtx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    // Mouse events
-    canvas.addEventListener('mousedown', startDrawing);
-    canvas.addEventListener('mousemove', draw);
-    canvas.addEventListener('mouseup', stopDrawing);
-    canvas.addEventListener('mouseout', stopDrawing);
-    
-    // Touch events
-    canvas.addEventListener('touchstart', (e) => {
-        e.preventDefault();
-        const touch = e.touches[0];
-        const rect = canvas.getBoundingClientRect();
-        state.lastX = touch.clientX - rect.left;
-        state.lastY = touch.clientY - rect.top;
-        state.isDrawing = true;
+    document.getElementById('submitSequenceBtn').addEventListener('click', () => {
+        const guess = parseInt(document.getElementById('sequenceInput').value);
+        if (guess === puzzle.answer) {
+            state.puzzleScore++;
+            document.getElementById('puzzleScore').textContent = state.puzzleScore;
+            puzzleUI.innerHTML = `
+                <div style="text-align: center; padding: 2rem;">
+                    <div style="font-size: 5rem; margin-bottom: 1rem;">✅</div>
+                    <div style="font-size: 2rem; font-weight: bold; margin-bottom: 2rem;">Correct! The answer was ${puzzle.answer}</div>
+                    <button onclick="startSequencePuzzle()" style="padding: 1rem 2rem; font-size: 1.2rem; border-radius: 8px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; cursor: pointer; font-weight: bold;">Next Puzzle</button>
+                </div>
+            `;
+        } else {
+            puzzleUI.innerHTML = `
+                <div style="text-align: center; padding: 2rem;">
+                    <div style="font-size: 5rem; margin-bottom: 1rem;">❌</div>
+                    <div style="font-size: 1.5rem; margin-bottom: 2rem;">The answer was: <strong>${puzzle.answer}</strong></div>
+                    <button onclick="startSequencePuzzle()" style="padding: 1rem 2rem; font-size: 1.2rem; border-radius: 8px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; cursor: pointer; font-weight: bold;">Try Again</button>
+                </div>
+            `;
+        }
     });
-    
-    canvas.addEventListener('touchmove', (e) => {
-        e.preventDefault();
-        if (!state.isDrawing) return;
-        const touch = e.touches[0];
-        const rect = canvas.getBoundingClientRect();
-        const currentX = touch.clientX - rect.left;
-        const currentY = touch.clientY - rect.top;
-        
-        state.drawingCtx.beginPath();
-        state.drawingCtx.moveTo(state.lastX, state.lastY);
-        state.drawingCtx.lineTo(currentX, currentY);
-        state.drawingCtx.stroke();
-        
-        state.lastX = currentX;
-        state.lastY = currentY;
-    });
-    
-    canvas.addEventListener('touchend', (e) => {
-        e.preventDefault();
-        state.isDrawing = false;
-    });
-    
-    // Color picker
-    const colorPicker = document.getElementById('colorPicker');
-    if (colorPicker) {
-        colorPicker.value = state.currentColor;
-        colorPicker.addEventListener('input', (e) => {
-            state.currentColor = e.target.value;
-            state.drawingCtx.strokeStyle = state.currentColor;
-        });
-    }
-    
-    // Brush size
-    const brushSize = document.getElementById('brushSize');
-    const brushSizeValue = document.getElementById('brushSizeValue');
-    if (brushSize) {
-        brushSize.value = state.brushSize;
-        brushSize.addEventListener('input', (e) => {
-            state.brushSize = parseInt(e.target.value);
-            state.drawingCtx.lineWidth = state.brushSize;
-            if (brushSizeValue) {
-                brushSizeValue.textContent = state.brushSize;
-            }
-        });
-    }
-    
-    // Clear button
-    const clearBtn = document.getElementById('clearCanvasBtn');
-    if (clearBtn) {
-        clearBtn.addEventListener('click', () => {
-            state.drawingCtx.fillStyle = '#ffffff';
-            state.drawingCtx.fillRect(0, 0, canvas.width, canvas.height);
-        });
-    }
-    
-    // Submit button
-    const submitBtn = document.getElementById('submitMinigameBtn');
-    if (submitBtn) {
-        submitBtn.addEventListener('click', submitMinigameAnswer);
-    }
-}
-
-function startDrawing(e) {
-    state.isDrawing = true;
-    const rect = state.drawingCanvas.getBoundingClientRect();
-    state.lastX = e.clientX - rect.left;
-    state.lastY = e.clientY - rect.top;
-}
-
-function draw(e) {
-    if (!state.isDrawing) return;
-    
-    const rect = state.drawingCanvas.getBoundingClientRect();
-    const currentX = e.clientX - rect.left;
-    const currentY = e.clientY - rect.top;
-    
-    state.drawingCtx.beginPath();
-    state.drawingCtx.moveTo(state.lastX, state.lastY);
-    state.drawingCtx.lineTo(currentX, currentY);
-    state.drawingCtx.stroke();
-    
-    state.lastX = currentX;
-    state.lastY = currentY;
-}
-
-function stopDrawing() {
-    state.isDrawing = false;
-}
-
-function submitMinigameAnswer() {
-    if (!state.drawingCanvas) return;
-    
-    // Convert canvas to base64
-    const imageData = state.drawingCanvas.toDataURL('image/png');
-    
-    // Only send to server if it's a synchronized minigame (not local)
-    if (state.ws && state.minigameState && !state.minigameState.local) {
-        state.ws.send(JSON.stringify({
-            type: 'minigame_submit',
-            minigame_type: state.minigameState.minigame_type || 'draw_freestyle',
-            data: imageData,
-            prompt: state.minigameState.prompt
-        }));
-    } else {
-        // Local minigame - just show result
-        setTimeout(() => {
-            hideMinigame();
-        }, 2000);
-    }
 }
 
 // ─────────────────────────── Init ─────────────────────────── #

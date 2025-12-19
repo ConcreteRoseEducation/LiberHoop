@@ -36,17 +36,13 @@ LiberHoop is a web-based quiz game platform that combines the competitive fun of
 ### 🎨 Minigames
 
 - **Lobby Minigames** (Player-controlled, client-side):
-  - 🎨 **Free Draw**: Players can draw anything while waiting
-  - ✏️ **Draw Prompt**: Players draw based on a custom prompt
-  - ⚡ **Microgames**: Warioware-style quick reaction games
-    - Tap When Red: Reaction time challenge
-    - Quick Math: Fast arithmetic problems
-    - Count Clicks: Audio counting challenge
-
-- **Session Minigames** (Host-controlled, synchronized):
-  - Drawing games that can be started after question reveals
-  - All player submissions displayed on host screen
-  - Timer-based gameplay
+  - ⚡ **Microgames**: Warioware-style quick reaction games with enhanced graphics
+    - Tap When Red: Reaction time challenge with visual feedback
+    - Quick Math: Fast arithmetic problems with gradient buttons
+    - Count Clicks: Audio counting challenge with animations
+  - 🔍 **Word Search**: Find hidden words in a letter grid
+  - 🧩 **Pattern Match**: Identify the next item in a visual pattern
+  - 🔢 **Sequence Puzzle**: Solve number sequence problems
 
 ### 🔐 Authentication & Hosting
 
