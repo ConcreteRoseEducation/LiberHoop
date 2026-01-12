@@ -499,6 +499,26 @@ function handleMessage(data) {
         case 'steal_winner':
             showStealWinner(data);
             break;
+            
+        case 'bowl_error':
+            // Show error message to host
+            console.error('Bowl mode error:', data.message);
+            alert(data.message || 'An error occurred in bowl mode');
+            // Handle error based on type
+            if (data.error_type === 'invalid_buzz_winner') {
+                // State will be reset by server, just show message
+            }
+            break;
+            
+        case 'bowl_reset_steal':
+            // Bowl state reset, transition to steal phase
+            showStealPhase(data);
+            break;
+            
+        case 'bowl_reset_reveal':
+            // Bowl state reset, reveal answer
+            showBowlNoCorrect(data);
+            break;
         
         // Minigame events
         case 'minigame_start':

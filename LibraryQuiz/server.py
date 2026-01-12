@@ -619,6 +619,11 @@ async def start_question(room: GameRoom):
     
     room.state = "question"
     question = room.get_current_question()
+    if not question:
+        # No question available - end game
+        await end_game(room)
+        return
+    
     room.question_start_time = time.time()
     q_type = question.get("type", "choice")
     
@@ -723,9 +728,14 @@ async def reveal_answer(room: GameRoom):
     """Reveal the correct answer and update scores"""
     if room.state != "question":
         return
+    
+    question = room.get_current_question()
+    if not question:
+        # No question available - skip to next or end game
+        await start_question(room)
+        return
         
     room.state = "reveal"
-    question = room.get_current_question()
     q_type = question.get("type", "choice")
     correct_answer = question.get("correct")
     
@@ -1035,6 +1045,51 @@ async def host_websocket(websocket: WebSocket, room_code: str, token: str = None
         room.host_ws = None
         room.host_connected = False
         
+        # If host disconnected during bowl mode judgment, reset judgment state
+        if room.game_mode == "bowl" and room.state == "question" and room.awaiting_judgment:
+            # Reset judgment state - transition to steal phase if possible, otherwise reveal answer
+            if room.team_mode and len(room.steal_eligible) > 0:
+                # Transition to steal phase
+                room.bowl_phase = "stealing"
+                room.buzz_winner = None
+                room.buzz_team = None
+                room.buzz_answer = None
+                room.awaiting_judgment = False
+                
+                await broadcast_to_room(room, {
+                    "type": "bowl_host_disconnected_steal",
+                    "message": "Host disconnected. Other teams can now steal!",
+                    "steal_eligible": room.steal_eligible
+                })
+            else:
+                # No steal possible - reveal answer
+                question = room.get_current_question()
+                correct_answer = question.get("correct") if question else None
+                
+                # Format correct answer for display
+                if question:
+                    if isinstance(correct_answer, list):
+                        correct_text = correct_answer[0]
+                    elif isinstance(correct_answer, bool):
+                        correct_text = "TRUE" if correct_answer else "FALSE"
+                    elif isinstance(correct_answer, int) and "answers" in question:
+                        correct_text = question["answers"][correct_answer]
+                    else:
+                        correct_text = str(correct_answer) if correct_answer else "N/A"
+                else:
+                    correct_text = "N/A"
+                
+                await broadcast_to_room(room, {
+                    "type": "bowl_host_disconnected_reveal",
+                    "message": "Host disconnected. Revealing answer...",
+                    "correct_answer": correct_text,
+                    "leaderboard": room.get_leaderboard(),
+                    "team_leaderboard": room.get_team_leaderboard() if room.team_mode else None
+                })
+                
+                room.state = "reveal"
+                room.reset_bowl_state()
+        
         # Notify all players that host disconnected
         for player in room.players.values():
             if player.ws:
@@ -1115,6 +1170,27 @@ async def player_websocket(websocket: WebSocket, room_code: str, player_id: str)
             # Check if player already answered
             if player.current_answer is not None:
                 join_msg["already_answered"] = True
+            
+            # Include bowl mode state if in bowl mode
+            if room.game_mode == "bowl":
+                join_msg["bowl_phase"] = room.bowl_phase
+                join_msg["buzz_winner"] = room.buzz_winner
+                join_msg["awaiting_judgment"] = room.awaiting_judgment
+                join_msg["steal_eligible"] = room.steal_eligible
+                
+                # Determine if this player can buzz
+                if room.bowl_phase == "stealing":
+                    join_msg["can_buzz"] = player.team_id in room.steal_eligible if player.team_id else False
+                elif room.bowl_phase == "buzzing":
+                    join_msg["can_buzz"] = True
+                else:
+                    join_msg["can_buzz"] = False
+                
+                # If this player is the buzz winner, indicate they can answer
+                if room.buzz_winner == player.id and room.bowl_phase == "answering":
+                    join_msg["is_buzz_winner"] = True
+                    if not room.awaiting_judgment:
+                        join_msg["can_submit_answer"] = True
     
     await websocket.send_json(join_msg)
     
@@ -1125,6 +1201,55 @@ async def player_websocket(websocket: WebSocket, room_code: str, player_id: str)
             await handle_player_message(room, player, data)
     except WebSocketDisconnect:
         player.ws = None
+        
+        # Check if this player was the buzz winner in bowl mode
+        if room.game_mode == "bowl" and room.state == "question" and room.buzz_winner == player.id:
+            # Buzz winner disconnected - need to recover
+            if room.team_mode and len(room.steal_eligible) > 0:
+                # Transition to steal phase
+                room.bowl_phase = "stealing"
+                room.buzz_winner = None
+                room.buzz_team = None
+                room.buzz_answer = None
+                room.awaiting_judgment = False
+                
+                # Notify all players
+                await broadcast_to_room(room, {
+                    "type": "bowl_buzz_winner_disconnected",
+                    "player_id": player.id,
+                    "player_name": player.name,
+                    "message": f"{player.name} disconnected. Other teams can now steal!",
+                    "steal_eligible": room.steal_eligible
+                })
+            else:
+                # No one can steal - reset bowl state and reveal answer
+                question = room.get_current_question()
+                correct_answer = question.get("correct") if question else None
+                
+                # Format correct answer for display
+                if question:
+                    if isinstance(correct_answer, list):
+                        correct_text = correct_answer[0]
+                    elif isinstance(correct_answer, bool):
+                        correct_text = "TRUE" if correct_answer else "FALSE"
+                    elif isinstance(correct_answer, int) and "answers" in question:
+                        correct_text = question["answers"][correct_answer]
+                    else:
+                        correct_text = str(correct_answer) if correct_answer else "N/A"
+                else:
+                    correct_text = "N/A"
+                
+                await broadcast_to_room(room, {
+                    "type": "bowl_buzz_winner_disconnected",
+                    "player_id": player.id,
+                    "player_name": player.name,
+                    "message": f"{player.name} disconnected. Revealing answer...",
+                    "correct_answer": correct_text
+                })
+                
+                room.state = "reveal"
+                room.reset_bowl_state()
+        
         # Notify host
         await send_to_host(room, {
             "type": "player_disconnected",
@@ -1230,6 +1355,54 @@ async def handle_host_message(room: GameRoom, data: dict):
         # Get the player who answered
         player = room.players.get(room.buzz_winner)
         if not player:
+            # Buzz winner is no longer valid (disconnected or removed)
+            await send_to_host(room, {
+                "type": "bowl_error",
+                "message": "The player who buzzed is no longer in the game. Resetting bowl state...",
+                "error_type": "invalid_buzz_winner"
+            })
+            
+            # Reset bowl state - transition to steal if possible, otherwise reveal
+            if room.team_mode and len(room.steal_eligible) > 0:
+                room.bowl_phase = "stealing"
+                room.buzz_winner = None
+                room.buzz_team = None
+                room.buzz_answer = None
+                room.awaiting_judgment = False
+                
+                await broadcast_to_room(room, {
+                    "type": "bowl_reset_steal",
+                    "message": "Other teams can now steal!",
+                    "steal_eligible": room.steal_eligible
+                })
+            else:
+                # No steal possible - reveal answer
+                question = room.get_current_question()
+                correct_answer = question.get("correct") if question else None
+                
+                if question:
+                    if isinstance(correct_answer, list):
+                        correct_text = correct_answer[0]
+                    elif isinstance(correct_answer, bool):
+                        correct_text = "TRUE" if correct_answer else "FALSE"
+                    elif isinstance(correct_answer, int) and "answers" in question:
+                        correct_text = question["answers"][correct_answer]
+                    else:
+                        correct_text = str(correct_answer) if correct_answer else "N/A"
+                else:
+                    correct_text = "N/A"
+                
+                await broadcast_to_room(room, {
+                    "type": "bowl_reset_reveal",
+                    "message": "Revealing answer...",
+                    "correct_answer": correct_text,
+                    "leaderboard": room.get_leaderboard(),
+                    "team_leaderboard": room.get_team_leaderboard() if room.team_mode else None
+                })
+                
+                room.state = "reveal"
+                room.reset_bowl_state()
+            
             return
         
         # Determine if this was a steal attempt
@@ -1243,7 +1416,11 @@ async def handle_host_message(room: GameRoom, data: dict):
             
             # Get the correct answer for display
             question = room.get_current_question()
-            correct_text = room.buzz_answer  # Use their answer as the "correct" one
+            if not question:
+                # Question not available - use submitted answer
+                correct_text = room.buzz_answer if room.buzz_answer else "N/A"
+            else:
+                correct_text = room.buzz_answer  # Use their answer as the "correct" one
             
             # Notify everyone
             await broadcast_to_room(room, {
@@ -1321,7 +1498,19 @@ async def handle_host_message(room: GameRoom, data: dict):
             return
         
         question = room.get_current_question()
-        correct_answer = question.get("correct") if question else None
+        if not question:
+            # No question - just reset and move on
+            room.state = "reveal"
+            room.reset_bowl_state()
+            await broadcast_to_room(room, {
+                "type": "bowl_steal_skipped",
+                "correct_answer": "N/A",
+                "leaderboard": room.get_leaderboard(),
+                "team_leaderboard": room.get_team_leaderboard() if room.team_mode else None
+            })
+            return
+        
+        correct_answer = question.get("correct")
         
         # Format correct answer
         if isinstance(correct_answer, list):

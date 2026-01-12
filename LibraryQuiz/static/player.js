@@ -211,6 +211,18 @@ function handleMessage(data) {
             
             // Handle mid-game join - if there's a current question, show it
             if (data.current_question && data.state === 'question') {
+                // Restore bowl mode state if present
+                if (data.bowl_phase !== undefined) {
+                    state.gameMode = 'bowl';
+                    state.bowlPhase = data.bowl_phase;
+                    state.canBuzz = data.can_buzz !== false;
+                    state.wonBuzz = data.is_buzz_winner === true;
+                    
+                    // Update current question with bowl mode info
+                    data.current_question.game_mode = 'bowl';
+                    data.current_question.can_buzz = data.can_buzz;
+                }
+                
                 if (data.already_answered) {
                     // Show waiting state
                     showQuestion(data.current_question);
@@ -218,6 +230,19 @@ function handleMessage(data) {
                     state.answered = true;
                 } else {
                     showQuestion(data.current_question);
+                    
+                    // If reconnecting as buzz winner and can submit answer, show answer input
+                    if (data.is_buzz_winner && data.can_submit_answer && state.bowlPhase === 'answering') {
+                        showBowlAnswerInput();
+                    } else if (data.bowl_phase === 'stealing' && data.can_buzz) {
+                        // Show steal button if eligible
+                        handleStealPhase({
+                            steal_eligible: data.steal_eligible || []
+                        });
+                    } else if (data.bowl_phase === 'waiting' || data.awaiting_judgment) {
+                        // Show waiting state
+                        showBowlWaiting(data.awaiting_judgment ? 'Waiting for host judgment...' : 'Waiting...');
+                    }
                 }
             }
             
@@ -365,6 +390,39 @@ function handleMessage(data) {
             
         case 'steal_not_eligible':
             showBowlWaiting('Your team already attempted.');
+            break;
+        
+        case 'bowl_buzz_winner_disconnected':
+            // Buzz winner disconnected - handle based on whether steal is possible
+            if (data.steal_eligible && data.steal_eligible.length > 0) {
+                handleStealPhase(data);
+            } else {
+                // No steal possible - show result
+                showBowlResult({
+                    correct_answer: data.correct_answer || 'N/A',
+                    message: data.message
+                }, false);
+            }
+            break;
+            
+        case 'bowl_host_disconnected_steal':
+            // Host disconnected during judgment, transition to steal
+            handleStealPhase(data);
+            break;
+            
+        case 'bowl_host_disconnected_reveal':
+            // Host disconnected during judgment, reveal answer
+            showBowlResult(data, false);
+            break;
+            
+        case 'bowl_reset_steal':
+            // Bowl state reset, transition to steal
+            handleStealPhase(data);
+            break;
+            
+        case 'bowl_reset_reveal':
+            // Bowl state reset, reveal answer
+            showBowlResult(data, false);
             break;
         
         // Minigame events
