@@ -318,10 +318,10 @@ function setupEventListeners() {
     document.getElementById('bowlModeBtn').addEventListener('click', () => setGameMode('bowl'));
     
     // Bowl settings
-    const requireAnswerEntry = document.getElementById('requireAnswerEntry');
+    const enableAnswerEntry = document.getElementById('enableAnswerEntry');
     const bowlAnswerTimer = document.getElementById('bowlAnswerTimer');
-    if (requireAnswerEntry) {
-        requireAnswerEntry.addEventListener('change', updateBowlSettings);
+    if (enableAnswerEntry) {
+        enableAnswerEntry.addEventListener('change', updateBowlSettings);
     }
     if (bowlAnswerTimer) {
         bowlAnswerTimer.addEventListener('change', updateBowlSettings);
@@ -494,10 +494,10 @@ function handleMessage(data) {
         case 'game_mode_changed':
             updateGameMode(data);
             // Update bowl settings if provided
-            if (data.bowl_require_answer_entry !== undefined) {
-                const requireAnswerEntry = document.getElementById('requireAnswerEntry');
-                if (requireAnswerEntry) {
-                    requireAnswerEntry.checked = data.bowl_require_answer_entry;
+            if (data.bowl_enable_answer_entry !== undefined) {
+                const enableAnswerEntry = document.getElementById('enableAnswerEntry');
+                if (enableAnswerEntry) {
+                    enableAnswerEntry.checked = data.bowl_enable_answer_entry;
                 }
             }
             if (data.bowl_answer_timer !== undefined) {
@@ -509,10 +509,10 @@ function handleMessage(data) {
             break;
             
         case 'bowl_settings_changed':
-            if (data.bowl_require_answer_entry !== undefined) {
-                const requireAnswerEntry = document.getElementById('requireAnswerEntry');
-                if (requireAnswerEntry) {
-                    requireAnswerEntry.checked = data.bowl_require_answer_entry;
+            if (data.bowl_enable_answer_entry !== undefined) {
+                const enableAnswerEntry = document.getElementById('enableAnswerEntry');
+                if (enableAnswerEntry) {
+                    enableAnswerEntry.checked = data.bowl_enable_answer_entry;
                 }
             }
             if (data.bowl_answer_timer !== undefined) {
@@ -646,10 +646,10 @@ function updateLobby(data) {
     updateGameModeUI();
     
     // Update bowl settings
-    if (data.bowl_require_answer_entry !== undefined) {
-        const requireAnswerEntry = document.getElementById('requireAnswerEntry');
-        if (requireAnswerEntry) {
-            requireAnswerEntry.checked = data.bowl_require_answer_entry;
+    if (data.bowl_enable_answer_entry !== undefined) {
+        const enableAnswerEntry = document.getElementById('enableAnswerEntry');
+        if (enableAnswerEntry) {
+            enableAnswerEntry.checked = data.bowl_enable_answer_entry;
         }
     }
     if (data.bowl_answer_timer !== undefined) {

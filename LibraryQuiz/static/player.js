@@ -23,7 +23,7 @@ const state = {
     bowlPhase: null,  // 'buzzing', 'answering', 'stealing', 'waiting'
     canBuzz: true,
     wonBuzz: false,
-    bowlRequireAnswerEntry: false,  // Whether answer must be entered before buzzing
+    bowlEnableAnswerEntry: true,  // Whether players can enter answers on device (false = buzzer only)
     // Minigame state
     minigameState: null,
     currentMicrogame: null,
@@ -232,9 +232,13 @@ function handleMessage(data) {
                 } else {
                     showQuestion(data.current_question);
                     
-                    // If reconnecting as buzz winner and can submit answer, show answer input
+                    // If reconnecting as buzz winner and can submit answer, show answer input (if enabled)
                     if (data.is_buzz_winner && data.can_submit_answer && state.bowlPhase === 'answering') {
-                        showBowlAnswerInput();
+                        if (state.bowlEnableAnswerEntry) {
+                            showBowlAnswerInput();
+                        } else {
+                            showBowlWaiting('Waiting for host judgment...');
+                        }
                     } else if (data.bowl_phase === 'stealing' && data.can_buzz) {
                         // Show steal button if eligible
                         handleStealPhase({
@@ -320,17 +324,18 @@ function handleMessage(data) {
             break;
             
         case 'bowl_settings_changed':
-            if (data.bowl_require_answer_entry !== undefined) {
-                state.bowlRequireAnswerEntry = data.bowl_require_answer_entry;
-                // Update UI if we're currently in a bowl mode question
-                if (state.gameMode === 'bowl' && state.bowlPhase === 'buzzing') {
-                    const preBuzzInput = document.getElementById('bowlPreBuzzInput');
-                    if (state.bowlRequireAnswerEntry) {
-                        if (preBuzzInput) preBuzzInput.classList.remove('hidden');
+            if (data.bowl_enable_answer_entry !== undefined) {
+                state.bowlEnableAnswerEntry = data.bowl_enable_answer_entry;
+                // Update UI if we're currently in a bowl mode question and have buzzed
+                if (state.gameMode === 'bowl' && state.bowlPhase === 'answering' && state.wonBuzz) {
+                    // If answer entry was disabled, hide the input
+                    if (!state.bowlEnableAnswerEntry) {
+                        document.getElementById('bowlAnswerInput').classList.add('hidden');
+                        showBowlWaiting('Waiting for host judgment...');
                     } else {
-                        if (preBuzzInput) preBuzzInput.classList.add('hidden');
+                        // If answer entry was enabled, show the input
+                        showBowlAnswerInput();
                     }
-                    updateBuzzButtonState();
                 }
             }
             break;
@@ -377,7 +382,13 @@ function handleMessage(data) {
         
         // Bowl mode events
         case 'you_buzzed_first':
-            showBowlAnswerInput();
+            // Show answer input only if answer entry is enabled
+            if (state.bowlEnableAnswerEntry) {
+                showBowlAnswerInput();
+            } else {
+                // Buzzer-only mode - just show waiting
+                showBowlWaiting('Waiting for host judgment...');
+            }
             break;
             
         case 'buzz_too_slow':
@@ -419,7 +430,13 @@ function handleMessage(data) {
             break;
             
         case 'you_can_steal':
-            showBowlAnswerInput();
+            // Show answer input only if answer entry is enabled
+            if (state.bowlEnableAnswerEntry) {
+                showBowlAnswerInput();
+            } else {
+                // Buzzer-only mode - just show waiting
+                showBowlWaiting('Waiting for host judgment...');
+            }
             break;
             
         case 'steal_not_eligible':
@@ -947,19 +964,17 @@ function updateBuzzButtonState() {
     if (!buzzBtn) return;
     
     buzzBtn.disabled = !state.canBuzz;
-    
-    // If answer entry is required, disable buzz button if answer is empty
-    if (state.bowlRequireAnswerEntry) {
-        const preBuzzText = document.getElementById('bowlPreBuzzText');
-        if (preBuzzText && !preBuzzText.value.trim()) {
-            buzzBtn.disabled = true;
-        }
-    }
-    
     buzzBtn.classList.remove('buzzed');
 }
 
 function showBowlAnswerInput() {
+    // Only show answer input if answer entry is enabled
+    if (!state.bowlEnableAnswerEntry) {
+        // Buzzer-only mode - just show waiting state
+        showBowlWaiting('Waiting for host judgment...');
+        return;
+    }
+    
     state.wonBuzz = true;
     state.bowlPhase = 'answering';
     
@@ -1055,28 +1070,14 @@ function showBowlResult(data, wasCorrect) {
 function sendBuzz() {
     if (!state.canBuzz || state.answered) return;
     
-    // If answer entry is required, get the pre-entered answer
-    let preAnswer = null;
-    if (state.bowlRequireAnswerEntry) {
-        const preBuzzText = document.getElementById('bowlPreBuzzText');
-        if (preBuzzText) {
-            preAnswer = preBuzzText.value.trim();
-            if (!preAnswer) return; // Don't allow buzz without answer
-        }
-    }
-    
     // Disable buzz button immediately
     const buzzBtn = document.getElementById('buzzBtn');
     buzzBtn.disabled = true;
     buzzBtn.classList.add('buzzed');
     
-    // Send buzz to server (with answer if required)
+    // Send buzz to server (no answer - answer entry happens after buzzing if enabled)
     if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-        const buzzMsg = { type: 'buzz' };
-        if (preAnswer) {
-            buzzMsg.answer = preAnswer;
-        }
-        state.ws.send(JSON.stringify(buzzMsg));
+        state.ws.send(JSON.stringify({ type: 'buzz' }));
     }
 }
 

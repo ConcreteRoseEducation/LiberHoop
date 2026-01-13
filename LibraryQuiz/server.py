@@ -304,7 +304,7 @@ class GameRoom:
         self.steal_eligible = []    # team_ids that can still steal
         self.awaiting_judgment = False
         self.bowl_phase = None      # "buzzing", "answering", "stealing", None
-        self.bowl_require_answer_entry = False  # Whether players must enter answer before buzzing
+        self.bowl_enable_answer_entry = True  # Whether players can enter answers on their device (False = buzzer only)
         self.bowl_answer_timer = 30  # Time limit for answers/steals in seconds (0 = no limit)
         
         # Minigame support
@@ -461,7 +461,7 @@ class GameRoom:
             "teams": {tid: t.to_dict() for tid, t in self.teams.items()},
             "game_mode": self.game_mode,
             "chat_messages": self.chat_messages,
-            "bowl_require_answer_entry": self.bowl_require_answer_entry,
+            "bowl_enable_answer_entry": self.bowl_enable_answer_entry,
             "bowl_answer_timer": self.bowl_answer_timer
         }
         # Include minigame state if active
@@ -665,7 +665,7 @@ async def start_question(room: GameRoom):
         "time_limit": time_limit,
         "wait_for_all": time_limit == 0,
         "game_mode": room.game_mode,
-        "bowl_require_answer_entry": room.bowl_require_answer_entry,
+        "bowl_enable_answer_entry": room.bowl_enable_answer_entry,
         "bowl_answer_timer": room.bowl_answer_timer
     }
     
@@ -1354,21 +1354,21 @@ async def handle_host_message(room: GameRoom, data: dict):
                 "game_mode": room.game_mode,
                 "team_mode": room.team_mode,
                 "teams": {tid: t.to_dict() for tid, t in room.teams.items()},
-                "bowl_require_answer_entry": room.bowl_require_answer_entry,
+                "bowl_enable_answer_entry": room.bowl_enable_answer_entry,
                 "bowl_answer_timer": room.bowl_answer_timer
             })
     
     elif msg_type == "set_bowl_settings":
         # Update bowl mode settings
-        if "require_answer_entry" in data:
-            room.bowl_require_answer_entry = bool(data.get("require_answer_entry"))
+        if "enable_answer_entry" in data:
+            room.bowl_enable_answer_entry = bool(data.get("enable_answer_entry"))
         if "answer_timer" in data:
             timer_value = int(data.get("answer_timer", 30))
             room.bowl_answer_timer = max(0, min(300, timer_value))  # Clamp between 0 and 300 seconds
         
         await broadcast_to_room(room, {
             "type": "bowl_settings_changed",
-            "bowl_require_answer_entry": room.bowl_require_answer_entry,
+            "bowl_enable_answer_entry": room.bowl_enable_answer_entry,
             "bowl_answer_timer": room.bowl_answer_timer
         })
     
@@ -1670,67 +1670,34 @@ async def handle_player_message(room: GameRoom, player: Player, data: dict):
         if room.game_mode != "bowl" or room.state != "question":
             return
         
-        # Check if answer was provided (when require_answer_entry is enabled)
-        pre_answer = data.get("answer", "").strip() if room.bowl_require_answer_entry else None
-        
         won_buzz = room.handle_buzz(player.id)
         
         if won_buzz:
-            # If answer was provided with buzz, store it immediately
-            if pre_answer:
-                room.buzz_answer = pre_answer
-                room.awaiting_judgment = True
-                
-                # Notify host immediately with the answer
-                team_info = None
-                if player.team_id and player.team_id in room.teams:
-                    team_info = room.teams[player.team_id].to_dict()
-                
-                await send_to_host(room, {
-                    "type": "bowl_answer_submitted",
-                    "player_id": player.id,
-                    "player_name": player.name,
-                    "team_id": player.team_id,
-                    "team": team_info,
-                    "answer": pre_answer,
-                    "is_steal": False
-                })
-                
-                # Tell player their answer was received
-                await send_to_player(player, {
-                    "type": "bowl_answer_received",
-                    "answer": pre_answer,
-                    "message": "Waiting for host judgment..."
-                })
-                
-                # Notify other players
-                for p in room.players.values():
-                    if p.id != player.id and p.ws:
-                        await send_to_player(p, {
-                            "type": "awaiting_judgment",
-                            "player_name": player.name,
-                            "team_id": player.team_id
-                        })
-            else:
-                # No pre-answer - normal flow
-                # Get team info if in team mode
-                team_info = None
-                if player.team_id and player.team_id in room.teams:
-                    team_info = room.teams[player.team_id].to_dict()
-                
-                # Notify all players who won the buzz
-                await broadcast_to_room(room, {
-                    "type": "buzz_winner",
-                    "player_id": player.id,
-                    "player_name": player.name,
-                    "team_id": player.team_id,
-                    "team": team_info
-                })
-                
-                # Tell the winner they can now answer
+            # Get team info if in team mode
+            team_info = None
+            if player.team_id and player.team_id in room.teams:
+                team_info = room.teams[player.team_id].to_dict()
+            
+            # Notify all players who won the buzz
+            await broadcast_to_room(room, {
+                "type": "buzz_winner",
+                "player_id": player.id,
+                "player_name": player.name,
+                "team_id": player.team_id,
+                "team": team_info
+            })
+            
+            # Tell the winner they can now answer (only if answer entry is enabled)
+            if room.bowl_enable_answer_entry:
                 await send_to_player(player, {
                     "type": "you_buzzed_first",
                     "message": "You buzzed first! Type your answer."
+                })
+            else:
+                # Buzzer-only mode - just confirm they buzzed
+                await send_to_player(player, {
+                    "type": "you_buzzed_first",
+                    "message": "You buzzed first! Answer verbally."
                 })
         else:
             # Tell player they were too slow
@@ -1810,11 +1777,17 @@ async def handle_player_message(room: GameRoom, player: Player, data: dict):
                 "team": team_info
             })
             
-            # Tell the winner they can now answer
-            await send_to_player(player, {
-                "type": "you_can_steal",
-                "message": "Your turn to steal! Type your answer."
-            })
+            # Tell the winner they can now answer (only if answer entry is enabled)
+            if room.bowl_enable_answer_entry:
+                await send_to_player(player, {
+                    "type": "you_can_steal",
+                    "message": "Your turn to steal! Type your answer."
+                })
+            else:
+                await send_to_player(player, {
+                    "type": "you_can_steal",
+                    "message": "Your turn to steal! Answer verbally."
+                })
         else:
             await send_to_player(player, {
                 "type": "steal_not_eligible",
